@@ -15,6 +15,12 @@ namespace OpalLocation.Controllers
             return View();
         }
 
+        //HttpGet
+        public IActionResult RouteNo(string route)
+        {
+
+        }
+
         public IActionResult About()
         {
             ViewData["Message"] = "Your application description page.";

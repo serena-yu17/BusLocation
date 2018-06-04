@@ -2,11 +2,17 @@
     ViewData["Title"] = "Bus Locations";
 }
 
+<style>
+    .input-group-header{
+        width:100px;
+    }
+</style>
+
 <form>
     <div class="form-group">
         <div class="input-group mb-3">
             <div class="input-group-prepend">
-                <span class="input-group-text input-text">
+                <span class="input-group-text input-text input-group-header">
                     Bus Route
                 </span>
             </div>
@@ -14,17 +20,20 @@
         </div>
         <div class="input-group mb-3">
             <div class="input-group-prepend">
-                <span class="input-group-text input-text">
+                <span class="input-group-text input-text input-group-header">
                     Direction
                 </span>
             </div>
             <select class="form-control" id="direction">
             </select>
         </div>
-        <button class="btn btn-outline-primary" type="submit" id="submit" disabled>Go</button>
+        <button class="btn btn-outline-primary input-group-header" type="submit" id="submit" disabled>Go</button>
     </div>
 </form>
 <br /><br />
 <div id="map"></div>
 
 <script src="~/js/site.js"></script>
+<script>
+    var tripUrl = '@Url.Action("RouteNo")';
+</script>
