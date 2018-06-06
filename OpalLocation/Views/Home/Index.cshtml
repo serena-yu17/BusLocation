@@ -17,6 +17,9 @@
                 </span>
             </div>
             <input class="form-control" id="route" type="text" placeholder="400" />
+            <div class="input-group-addon">
+                <button id="searchRoute" class="btn btn-outline-secondary"><img src="~/images/lookup.svg" style="height:20px;"/></button>
+            </div>
         </div>
         <div class="input-group mb-3">
             <div class="input-group-prepend">
@@ -35,5 +38,5 @@
 
 <script src="~/js/site.js"></script>
 <script>
-    var tripUrl = '@Url.Action("RouteNo")';
+    var tripUrl = '@Url.Action("Route")';
 </script>

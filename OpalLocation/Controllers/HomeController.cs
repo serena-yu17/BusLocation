@@ -1,10 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using OpalLocation.Models;
+using System.Diagnostics;
 
 namespace OpalLocation.Controllers
 {
@@ -16,16 +12,16 @@ namespace OpalLocation.Controllers
         }
 
         //HttpGet
-        public IActionResult RouteNo(string route)
+        public IActionResult Route(string route)
         {
-
+            var trips = TripData.getTrip(route);
+            return Json(trips);
         }
 
-        public IActionResult About()
+        public IActionResult Location(uint[] tripIDs)
         {
-            ViewData["Message"] = "Your application description page.";
-
-            return View();
+            var loc = TripData.getLoc(tripIDs);
+            return Json(loc);
         }
 
         public IActionResult Contact()
