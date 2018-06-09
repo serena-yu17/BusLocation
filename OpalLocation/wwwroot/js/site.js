@@ -20,28 +20,38 @@ $(document).ready(function () {
             initialLocation = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
             map.setCenter(initialLocation);
         });
-    }
-    const busIcon = {
-        url: "/images/Bus.svg",
-        scaledSize: new google.maps.Size(30, 30),
-        origin: new google.maps.Point(0, 0),
-        anchor: new google.maps.Point(15, 15),
-        labelOrigin: new google.maps.Point(0, -5)
+    }    
+
+    function busIcon() {
+        var size = Math.min($(document).width(), $(document).height()) * 0.04;
+        return {
+            url: "/images/Bus.svg",
+            scaledSize: new google.maps.Size(size, size),
+            origin: new google.maps.Point(0, 0),
+            anchor: new google.maps.Point(size / 2, size / 2),
+            labelOrigin: new google.maps.Point(size / 2, -size / 8)
+        };
     }
 
-    const userIcon = {
-        url: "/images/crosshair.svg",
-        scaledSize: new google.maps.Size(20, 20),
-        origin: new google.maps.Point(0, 0),
-        anchor: new google.maps.Point(20, 20),
-        labelOrigin: new google.maps.Point(15, -5)
+    function userIcon() {
+        var size = Math.min($(document).width(), $(document).height()) * 0.02;
+        return {
+            url: "/images/crosshair.svg",
+            scaledSize: new google.maps.Size(size, size),
+            origin: new google.maps.Point(0, 0),
+            anchor: new google.maps.Point(size /2, size/ 2),
+            labelOrigin: new google.maps.Point(size * 0.75, -size / 6)
+        };
     }
 
-    const stopIcon = {
-        url: "/images/stop.svg",
-        scaledSize: new google.maps.Size(15, 15),
-        origin: new google.maps.Point(0, 0),
-        anchor: new google.maps.Point(5, 5),
+    function stopIcon() {
+        var size = Math.min($(document).width(), $(document).height()) * 0.015;
+        return {
+            url: "/images/stop.svg",
+            scaledSize: new google.maps.Size(size, size),
+            origin: new google.maps.Point(0, 0),
+            anchor: new google.maps.Point(size / 3, size / 3)
+        };
     }
 
     var options = {};
@@ -52,6 +62,7 @@ $(document).ready(function () {
     var tripStopSigs = {};
     var availStops = new Set();
     var stopMarkers = [];
+    var userMarker = null;
 
     setInterval(function () {
         tripStops = {};
@@ -216,7 +227,7 @@ $(document).ready(function () {
                     if (!usedStops.has(key)) {
                         let marker = new google.maps.Marker({
                             position: new google.maps.LatLng(stops[j].latitude, stops[j].longitude),
-                            icon: stopIcon,
+                            icon: stopIcon(),
                             map: map
                         });
                         stopMarkers.push(marker);
@@ -298,7 +309,7 @@ $(document).ready(function () {
 
                 let marker = new google.maps.Marker({
                     position: new google.maps.LatLng(lat, lon),
-                    icon: busIcon,
+                    icon: busIcon(),
                     label: {
                         text: occu,
                         color: "#BE1616",
@@ -320,9 +331,11 @@ $(document).ready(function () {
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(function (position) {
                 userLoc = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
-                let marker = new google.maps.Marker({
+                if (userMarker)
+                    userMarker.setMap(null);
+                userMarker = new google.maps.Marker({
                     position: userLoc,
-                    icon: userIcon,
+                    icon: userIcon(),
                     label: {
                         text: 'I am here',
                         color: '#2916BE',

@@ -241,7 +241,7 @@ namespace OpalLocation.Models
                             if (ulong.TryParse(tripIDStr, out ulong tripID) &&
                                 decimal.TryParse(latitudeStr, out decimal latitude) &&
                                 decimal.TryParse(longitudeStr, out decimal longitude)
-                                && occup != "Empty Train")
+                                )
                             {
                                 TripLoc trip = new TripLoc()
                                 {
@@ -392,8 +392,10 @@ namespace OpalLocation.Models
                                                     case 3:
                                                         if (type == train)
                                                         {
-                                                            desc = new string(content.ToArray());
-                                                            if (!string.IsNullOrEmpty(route) && !string.IsNullOrEmpty(desc) && tripID != 0)
+                                                            desc = new string(content.ToArray()).Trim();
+                                                            if (!string.IsNullOrEmpty(route) && 
+                                                                !string.IsNullOrEmpty(desc) && tripID != 0 &&
+                                                                desc != "Empty Train")
                                                             {
                                                                 if (!newTrips.ContainsKey(route))
                                                                     newTrips[route] = new List<TripInfo>();
