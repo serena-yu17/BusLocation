@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -22,10 +23,41 @@ namespace OpalLocation.Models
         }
     }
 
-    public class TripLoc
+    public class Coordinate
     {
         public decimal latitude { get; set; }
         public decimal longitude { get; set; }
+        public Coordinate(decimal lat, decimal lon)
+        {
+            latitude = lat;
+            longitude = lon;
+        }
+
+        public override int GetHashCode()
+        {
+            return latitude.GetHashCode() ^ longitude.GetHashCode();
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (this == null && obj == null)
+                return true;
+            if (this == null && obj != null)
+                return false;
+            if (this != null && obj == null)
+                return false;
+            if (ReferenceEquals(this, obj))
+                return true;
+            if (!(obj is Coordinate))
+                return false;
+            var cor = obj as Coordinate;
+            return (this.latitude == cor.latitude && this.longitude == cor.longitude);
+        }
+    }
+
+    public class TripLoc
+    {
+        public Coordinate coordinate { get; set; }
         public string occupancy { get; set; }
     }
 
@@ -37,7 +69,9 @@ namespace OpalLocation.Models
         public static Dictionary<uint, List<TripLoc>> locations = new Dictionary<uint, List<TripLoc>>();
 
         //trips key: RouteNo e.g. "370", value: Tuple Item1: direction, Item2: tripID
-        public static Dictionary<string, List<TripInfo>> trips = new Dictionary<string, List<TripInfo>>();
+        static Dictionary<string, List<TripInfo>> trips = new Dictionary<string, List<TripInfo>>();
+        static Dictionary<uint, Coordinate> stopLocations = new Dictionary<uint, Coordinate>();
+        static Dictionary<uint, List<uint>> tripStops = new Dictionary<uint, List<uint>>();
 
         static Task tripTsk = null;
         static object tripLock = new object();
@@ -57,18 +91,20 @@ namespace OpalLocation.Models
             tripTimer.Elapsed += new System.Timers.ElapsedEventHandler((s, e) => loadTrip());
             tripTimer.Interval = 1000 * 3600 * 24;  //1 day
             tripTimer.AutoReset = true;
+            tripTimer.Start();
             locTimer.Elapsed += new System.Timers.ElapsedEventHandler((s, e) => loadLoc());
             locTimer.Interval = 1000 * 15;  //15s
             locTimer.AutoReset = true;
+            locTimer.Start();
         }
 
-        public static Dictionary<string, HashSet<uint>> getTrip(string route)
+        public static Dictionary<string, uint[]> getTrip(string route)
         {
             if (trips.Count == 0 && tripTsk != null && !tripTsk.IsCompleted)
                 tripTsk.Wait();
             if (locations.Count == 0 && locTsk != null && !locTsk.IsCompleted)
                 locTsk.Wait();
-            Dictionary<string, HashSet<uint>> res = new Dictionary<string, HashSet<uint>>();
+            Dictionary<string, HashSet<uint>> tripCollection = new Dictionary<string, HashSet<uint>>();
             var routeTrimmed = route.Trim().ToUpper();
             if (trips.ContainsKey(routeTrimmed))
             {
@@ -77,11 +113,14 @@ namespace OpalLocation.Models
                 foreach (var t in tripLst)
                     if (locations.ContainsKey(t.tripID))
                     {
-                        if (!res.ContainsKey(t.direction))
-                            res[t.direction] = new HashSet<uint>();
-                        res[t.direction].Add(t.tripID);
-                    }                 
+                        if (!tripCollection.ContainsKey(t.direction))
+                            tripCollection[t.direction] = new HashSet<uint>();
+                        tripCollection[t.direction].Add(t.tripID);
+                    }
             }
+            Dictionary<string, uint[]> res = new Dictionary<string, uint[]>();
+            foreach (var kp in tripCollection)
+                res[kp.Key] = kp.Value.ToArray();
             return res;
         }
 
@@ -90,9 +129,29 @@ namespace OpalLocation.Models
             if (locations.Count == 0 && locTsk != null && !locTsk.IsCompleted)
                 locTsk.Wait();
             List<TripLoc> res = new List<TripLoc>();
-            foreach(var id in tripIDs)
-                res.AddRange(locations[id]);
+            foreach (var id in tripIDs)
+                if (locations.ContainsKey(id))
+                    res.AddRange(locations[id]);
             return res.ToArray();
+        }
+
+        public static Coordinate[] getStops(uint[] tripIDs)
+        {
+            if (trips.Count == 0 && tripTsk != null && !tripTsk.IsCompleted)
+                tripTsk.Wait();
+            HashSet<Coordinate> coordinates = new HashSet<Coordinate>();
+            foreach (var trip in tripIDs)
+                if (tripStops.ContainsKey(trip))
+                {
+                    var stops = tripStops[trip];
+                    foreach (var s in stops)
+                        if (stopLocations.ContainsKey(s))
+                        {
+                            var coord = stopLocations[s];
+                            coordinates.Add(coord);
+                        }
+                }
+            return coordinates.ToArray();
         }
 
         static void loadTrip()
@@ -136,8 +195,7 @@ namespace OpalLocation.Models
                             {
                                 TripLoc trip = new TripLoc()
                                 {
-                                    latitude = latitude,
-                                    longitude = longitude,
+                                    coordinate = new Coordinate(latitude, longitude),
                                     occupancy = occup.Replace('_', ' ').ToLower()
                                 };
                                 if (!newLoc.ContainsKey(tripID))
@@ -150,12 +208,11 @@ namespace OpalLocation.Models
             Interlocked.Exchange(ref locations, newLoc);
         }
 
-        const string tripPattern = @"""([\s\S]*?)""";
-        static Regex tripRegex = new Regex(tripPattern, RegexOptions.Compiled | RegexOptions.Singleline);
+        const string quotePattern = @"""([^""]*?)""";
+        static Regex quoteRegex = new Regex(quotePattern, RegexOptions.Compiled | RegexOptions.Singleline);
 
         static async Task getTripInfo()
         {
-            Dictionary<string, List<TripInfo>> newTrips = new Dictionary<string, List<TripInfo>>();
             using (HttpClient client = new HttpClient())
             {
                 client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("apikey", "BusSettings.busStopKey");
@@ -163,8 +220,10 @@ namespace OpalLocation.Models
                 using (var contentStream = await res.Content.ReadAsStreamAsync())
                 using (ZipArchive zip = new ZipArchive(contentStream))
                     foreach (var entry in zip.Entries)
+                    {
                         if (entry.Name.StartsWith("trips"))
                         {
+                            Dictionary<string, List<TripInfo>> newTrips = new Dictionary<string, List<TripInfo>>();
                             using (var stream = entry.Open())
                             using (MemoryStream ms = new MemoryStream())
                             {
@@ -173,8 +232,7 @@ namespace OpalLocation.Models
                                 using (StreamReader rd = new StreamReader(ms))
                                 {
                                     var text = await rd.ReadToEndAsync();
-                                    Console.WriteLine(text);
-                                    var matches = tripRegex.Matches(text);
+                                    var matches = quoteRegex.Matches(text);
                                     int i = 0;
                                     string route = null, desc = null;
                                     uint tripID = 0;
@@ -192,10 +250,10 @@ namespace OpalLocation.Models
                                                         route = routeStr.Substring(j + 1, routeStr.Length - j - 1).Trim().ToUpper();
                                                     break;
                                                 case 2:
-                                                    var tripStr = m.Groups[1].Value;                                                    
+                                                    var tripStr = m.Groups[1].Value;
                                                     uint.TryParse(tripStr, out tripID);
                                                     if (tripID >= 607400 && tripID < 607642)
-                                                        Trace.WriteLine(route + ": " +  tripID.ToString());
+                                                        Trace.WriteLine(route + ": " + tripID.ToString());
                                                     break;
                                                 case 9:
                                                     desc = m.Groups[1].Value;
@@ -214,9 +272,93 @@ namespace OpalLocation.Models
                                     }
                                 }
                             }
-                            break;
+                            Interlocked.Exchange(ref trips, newTrips);
                         }
-                Interlocked.Exchange(ref trips, newTrips);
+                        else if (entry.Name.StartsWith("stop_times"))
+                        {
+                            Dictionary<uint, HashSet<uint>> tempStops = new Dictionary<uint, HashSet<uint>>();
+                            using (var stream = entry.Open())
+                            using (MemoryStream ms = new MemoryStream())
+                            {
+                                await stream.CopyToAsync(ms);
+                                ms.Seek(0, SeekOrigin.Begin);
+                                using (StreamReader rd = new StreamReader(ms))
+                                {
+                                    var text = await rd.ReadToEndAsync();
+                                    var matches = quoteRegex.Matches(text);
+                                    int i = 0;
+                                    uint tripID = 0, stopID = 0;
+                                    foreach (Match m in matches)
+                                    {
+                                        if (m.Success && m.Groups.Count > 1)
+                                            switch (i % 11)
+                                            {
+                                                case 0:
+                                                    var tripStr = m.Groups[1].Value;
+                                                    uint.TryParse(tripStr, out tripID);
+                                                    break;
+                                                case 3:
+                                                    var stopStr = m.Groups[1].Value;
+                                                    uint.TryParse(stopStr, out stopID);
+                                                    if (stopID != 0 && tripID != 0)
+                                                    {
+                                                        if (!tempStops.ContainsKey(tripID))
+                                                            tempStops[tripID] = new HashSet<uint>();
+                                                        tempStops[tripID].Add(stopID);
+                                                    }
+                                                    break;
+                                            }
+                                        i++;
+                                    }
+                                }
+                            }
+                            Dictionary<uint, List<uint>> newTripStops = new Dictionary<uint, List<uint>>();
+                            foreach (var kp in tempStops)
+                                newTripStops[kp.Key] = new List<uint>(kp.Value);
+                            Interlocked.Exchange(ref tripStops, newTripStops);
+                        }
+                        else if (entry.Name.StartsWith("stops"))
+                        {
+                            Dictionary<uint, Coordinate> newStopLocations = new Dictionary<uint, Coordinate>();
+                            using (var stream = entry.Open())
+                            using (MemoryStream ms = new MemoryStream())
+                            {
+                                await stream.CopyToAsync(ms);
+                                ms.Seek(0, SeekOrigin.Begin);
+                                using (StreamReader rd = new StreamReader(ms))
+                                {
+                                    var text = await rd.ReadToEndAsync();
+                                    var matches = quoteRegex.Matches(text);
+                                    int i = 0;
+                                    decimal lat = 0, lon = 0;
+                                    uint stopID = 0;
+                                    foreach (Match m in matches)
+                                    {
+                                        if (m.Success && m.Groups.Count > 1)
+                                            switch (i % 7)
+                                            {
+                                                case 0:
+                                                    var stopStr = m.Groups[1].Value;
+                                                    uint.TryParse(stopStr, out stopID);
+                                                    break;
+                                                case 2:
+                                                    var latStr = m.Groups[1].Value;
+                                                    decimal.TryParse(latStr, out lat);
+                                                    break;
+                                                case 3:
+                                                    var lonStr = m.Groups[1].Value;
+                                                    decimal.TryParse(lonStr, out lon);
+                                                    if (stopID != 0 && lat != 0 && lon != 0)
+                                                        newStopLocations[stopID] = new Coordinate(lat, lon);
+                                                    break;
+                                            }
+                                        i++;
+                                    }
+                                }
+                            }
+                            Interlocked.Exchange(ref stopLocations, newStopLocations);
+                        }
+                    }
             }
         }
     }

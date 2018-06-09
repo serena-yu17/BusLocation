@@ -3,8 +3,8 @@
 }
 
 <style>
-    .input-group-header{
-        width:100px;
+    .input-group-header {
+        width: 100px;
     }
 </style>
 
@@ -16,27 +16,36 @@
                     Bus Route
                 </span>
             </div>
-            <input class="form-control" id="route" type="text" placeholder="400" />
+            <input class="form-control" id="route" type="text" placeholder="Input your bus route ID e.g. 400" />
             <div class="input-group-addon">
-                <button id="searchRoute" class="btn btn-outline-secondary"><img src="~/images/lookup.svg" style="height:20px;"/></button>
+                <button id="searchRoute" class="btn btn-outline-secondary" type="submit"><img src="~/images/lookup.svg" style="height:20px;" /></button>
             </div>
         </div>
-        <div class="input-group mb-3">
-            <div class="input-group-prepend">
-                <span class="input-group-text input-text input-group-header">
-                    Direction
-                </span>
-            </div>
-            <select class="form-control" id="direction">
-            </select>
-        </div>
-        <button class="btn btn-outline-primary input-group-header" type="submit" id="submit" disabled>Go</button>
     </div>
 </form>
-<br /><br />
-<div id="map"></div>
+<form>
+    <div id="directionForm" class="hidden">
+        <div class="form-group">
+            <div class="input-group mb-3" id="directionOptions">
+                <div class="input-group-prepend">
+                    <span class="input-group-text input-text input-group-header">
+                        Direction
+                    </span>
+                </div>
+            </div>
+        </div>
+        <button class="btn btn-outline-primary input-group-header" type="submit" id="submit">Check</button>
+    </div>
+</form>
+<br />
+<div id="map" class="hidden" style="height:70vh; width:100%">
+</div>        
 
+<script src="https://maps.googleapis.com/maps/api/js?key=&callback=initMap"
+        type="text/javascript"></script>
 <script src="~/js/site.js"></script>
 <script>
-    var tripUrl = '@Url.Action("Route")';
+    const tripUrl = '@Url.Action("Route")';
+    const locUrl = '@Url.Action("Location")';
+    const stopUrl = '@Url.Action("Stop")';
 </script>

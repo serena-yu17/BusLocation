@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Newtonsoft.Json;
 using OpalLocation.Models;
+using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace OpalLocation.Controllers
@@ -18,10 +20,28 @@ namespace OpalLocation.Controllers
             return Json(trips);
         }
 
-        public IActionResult Location(uint[] tripIDs)
+        public IActionResult Location(string tripIDs)
         {
-            var loc = TripData.getLoc(tripIDs);
+            var tripArr = strToUint(tripIDs);
+            var loc = TripData.getLoc(tripArr);
             return Json(loc);
+        }
+
+        public ActionResult Stop(string tripIDs)
+        {
+            var tripArr = strToUint(tripIDs);
+            var coord = TripData.getStops(tripArr);
+            return Json(coord);
+        }
+
+        private uint[] strToUint(string str)
+        {
+            List<uint> arr = new List<uint>();
+            var tripIDSec = str.Split(new char[] { ',', ' ', ';' }, System.StringSplitOptions.RemoveEmptyEntries);
+            foreach (var sec in tripIDSec)
+                if (uint.TryParse(sec, out var id))
+                    arr.Add(id);
+            return arr.ToArray();
         }
 
         public IActionResult Contact()
@@ -31,9 +51,9 @@ namespace OpalLocation.Controllers
             return View();
         }
 
-        public IActionResult Error()
-        {
-            return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
-        }
+        //public IActionResult Error()
+        //{
+        //    return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+        //}
     }
 }
