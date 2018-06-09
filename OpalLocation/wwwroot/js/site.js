@@ -20,39 +20,7 @@ $(document).ready(function () {
             initialLocation = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
             map.setCenter(initialLocation);
         });
-    }    
-
-    function busIcon() {
-        var size = Math.min($(document).width(), $(document).height()) * 0.04;
-        return {
-            url: "/images/Bus.svg",
-            scaledSize: new google.maps.Size(size, size),
-            origin: new google.maps.Point(0, 0),
-            anchor: new google.maps.Point(size / 2, size / 2),
-            labelOrigin: new google.maps.Point(size / 2, -size / 8)
-        };
-    }
-
-    function userIcon() {
-        var size = Math.min($(document).width(), $(document).height()) * 0.02;
-        return {
-            url: "/images/crosshair.svg",
-            scaledSize: new google.maps.Size(size, size),
-            origin: new google.maps.Point(0, 0),
-            anchor: new google.maps.Point(size /2, size/ 2),
-            labelOrigin: new google.maps.Point(size * 0.75, -size / 6)
-        };
-    }
-
-    function stopIcon() {
-        var size = Math.min($(document).width(), $(document).height()) * 0.015;
-        return {
-            url: "/images/stop.svg",
-            scaledSize: new google.maps.Size(size, size),
-            origin: new google.maps.Point(0, 0),
-            anchor: new google.maps.Point(size / 3, size / 3)
-        };
-    }
+    } 
 
     var options = {};
     var markers = [];
@@ -87,6 +55,48 @@ $(document).ready(function () {
         getLoc(true);
         refreshLoc();
     };
+
+    document.getElementById("route").onfocus = function () {
+        document.getElementById("directionForm").classList.add("fade");
+        document.getElementById("map").classList.add("fade");
+    };
+
+    document.getElementById("route").onblur = function () {
+        document.getElementById("directionForm").classList.remove("fade");
+        document.getElementById("map").classList.remove("fade");
+    };
+
+    function busIcon() {
+        var size = Math.min($(document).width(), $(document).height()) * 0.04;
+        return {
+            url: "/images/Bus.svg",
+            scaledSize: new google.maps.Size(size, size),
+            origin: new google.maps.Point(0, 0),
+            anchor: new google.maps.Point(size / 2, size / 2),
+            labelOrigin: new google.maps.Point(size / 2, -size / 8)
+        };
+    }
+
+    function userIcon() {
+        var size = Math.min($(document).width(), $(document).height()) * 0.02;
+        return {
+            url: "/images/crosshair.svg",
+            scaledSize: new google.maps.Size(size, size),
+            origin: new google.maps.Point(0, 0),
+            anchor: new google.maps.Point(size / 2, size / 2),
+            labelOrigin: new google.maps.Point(size * 0.75, -size / 6)
+        };
+    }
+
+    function stopIcon() {
+        var size = Math.min($(document).width(), $(document).height()) * 0.015;
+        return {
+            url: "/images/stop.svg",
+            scaledSize: new google.maps.Size(size, size),
+            origin: new google.maps.Point(0, 0),
+            anchor: new google.maps.Point(size / 3, size / 3)
+        };
+    }
 
     function refreshLoc() {
         refreshInterval = setInterval(function () {
@@ -267,9 +277,11 @@ $(document).ready(function () {
                 options[id] = {
                     radID: radID,
                     trips: data[trip]
-                };
+                };                   
                 count++;
             }
+        if (document.getElementById('directionRadio0'))
+            document.getElementById('directionRadio0').focus();
     }
 
     function renderMarkers(data, recenter = false) {
@@ -282,11 +294,13 @@ $(document).ready(function () {
                 break;
             }
         if (isEmpty) {
+            document.getElementById('prompt').classList.remove("hidden");
+            document.getElementById('prompt').innerHTML = 'No vehicles active were found.';
             document.getElementById('map').classList.add('hidden');
             return;
         }
         document.getElementById('map').classList.remove('hidden');
-
+        document.getElementById('prompt').classList.add("hidden");
         for (let i = 0; i < markers.length; i++)
             markers[i].setMap(null);
         markers.length = 0;
