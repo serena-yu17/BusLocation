@@ -74,17 +74,15 @@ namespace OpalLocation.Models
         const string bus = "buses";
         const string train = "sydneytrains";
 
-        public static Dictionary<ulong, List<TripLoc>> locations = new Dictionary<ulong, List<TripLoc>>();
-
-        //trips key: RouteNo e.g. "370", value: Tuple Item1: direction, Item2: tripID
+        static Dictionary<ulong, List<TripLoc>> locations = new Dictionary<ulong, List<TripLoc>>();
         static Dictionary<string, List<TripInfo>> trips = new Dictionary<string, List<TripInfo>>();
         static Dictionary<uint, Coordinate> stopLocations = new Dictionary<uint, Coordinate>();
         static Dictionary<ulong, uint[]> tripStops = new Dictionary<ulong, uint[]>();
 
         static Task tripTsk = null;
-        static object tripLock = new object();
+        static object tripLoadLock = new object();
         static Task locTsk = null;
-        static object locLock = new object();
+        static object locLoadLock = new object();
 
         static System.Timers.Timer tripTimer = new System.Timers.Timer();
         static System.Timers.Timer locTimer = new System.Timers.Timer();
@@ -169,14 +167,14 @@ namespace OpalLocation.Models
         static void loadTrip()
         {
             if (tripTsk == null || tripTsk.IsCompleted)
-                lock (tripLock)
+                lock (tripLoadLock)
                     if (tripTsk == null || tripTsk.IsCompleted)
                         tripTsk = getTripInfo();
         }
         static void loadLoc()
         {
             if (locTsk == null || locTsk.IsCompleted)
-                lock (locLock)
+                lock (locLoadLock)
                     if (locTsk == null || locTsk.IsCompleted)
                         locTsk = getLocation();
         }
@@ -199,10 +197,13 @@ namespace OpalLocation.Models
 
         static string stripID(string tripID)
         {
+            int i = 0;
+            for (; i < tripID.Length && tripID[i] != '.'; i++)
+                ;       //skip the first section
             StringBuilder sb = new StringBuilder();
-            foreach (var ch in tripID)
-                if (Char.IsDigit(ch))
-                    sb.Append(ch);
+            for (; i < tripID.Length; i++)
+                if (Char.IsDigit(tripID[i]))
+                    sb.Append(tripID[i]);
             return sb.ToString();
         }
 
@@ -220,7 +221,6 @@ namespace OpalLocation.Models
                 using (StreamReader sr = new StreamReader(contentStream))
                 {
                     var text = await sr.ReadToEndAsync();
-                    Console.WriteLine(text);
                     MatchCollection locMatches = locationRegex.Matches(text);
                     MatchCollection occuMatches = null;
                     if (type == bus)
@@ -240,7 +240,8 @@ namespace OpalLocation.Models
                                 tripIDStr = stripID(tripIDStr);
                             if (ulong.TryParse(tripIDStr, out ulong tripID) &&
                                 decimal.TryParse(latitudeStr, out decimal latitude) &&
-                                decimal.TryParse(longitudeStr, out decimal longitude))
+                                decimal.TryParse(longitudeStr, out decimal longitude)
+                                && occup != "Empty Train")
                             {
                                 TripLoc trip = new TripLoc()
                                 {
@@ -255,7 +256,9 @@ namespace OpalLocation.Models
                     }
                 }
             }
-            Interlocked.Exchange(ref locations, newLoc);
+            lock (locations)
+                foreach (var kp in newLoc)
+                    locations[kp.Key] = kp.Value;
         }
 
         static async Task getTripInfo(string type)
@@ -424,9 +427,9 @@ namespace OpalLocation.Models
                                     }
                                 }
                             }
-                            var old = Interlocked.Exchange(ref trips, newTrips);
-                            if (old != null)
-                                old.Clear();
+                            lock (trips)
+                                foreach (var kp in newTrips)
+                                    trips[kp.Key] = kp.Value;
                             routeID.Clear();
                         }
                         else if (entry.Name.StartsWith("stop_times"))
@@ -494,12 +497,9 @@ namespace OpalLocation.Models
                                     }
                                 }
                             }
-                            Dictionary<ulong, uint[]> newTripStops = new Dictionary<ulong, uint[]>();
-                            foreach (var kp in tempStops)
-                                newTripStops[kp.Key] = kp.Value.ToArray();
-                            var old = Interlocked.Exchange(ref tripStops, newTripStops);
-                            if (old != null)
-                                old.Clear();
+                            lock (tripStops)
+                                foreach (var kp in tempStops)
+                                    tripStops[kp.Key] = kp.Value.ToArray();
                         }
                         else if (entry.Name.StartsWith("stops"))
                         {
@@ -590,9 +590,9 @@ namespace OpalLocation.Models
                                     }
                                 }
                             }
-                            var old = Interlocked.Exchange(ref stopLocations, newStopLocations);
-                            if (old != null)
-                                old.Clear();
+                            lock (stopLocations)
+                                foreach (var kp in newStopLocations)
+                                    stopLocations[kp.Key] = kp.Value;
                         }
                     }
                 }

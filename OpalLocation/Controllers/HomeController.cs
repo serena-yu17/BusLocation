@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using OpalLocation.Models;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace OpalLocation.Controllers
 {
@@ -15,7 +16,15 @@ namespace OpalLocation.Controllers
         public IActionResult Route(string route)
         {
             var trips = TripData.getTrip(route);
-            return Json(trips);
+            var converted = new Dictionary<string, string[]>();
+            foreach(var kp in trips)
+            {
+                string[] arr = new string[kp.Value.Length];
+                for (int i = 0; i < kp.Value.Length; i++)
+                    arr[i] = kp.Value[i].ToString();
+                converted[kp.Key] = arr;
+            }
+            return Json(converted);
         }
 
         public IActionResult Location(string tripIDs)
@@ -29,7 +38,10 @@ namespace OpalLocation.Controllers
         {
             var tripArr = strToUint(tripIDs);
             var coord = TripData.getStops(tripArr);
-            return Json(coord);
+            var converted = new Dictionary<string, Coordinate[]>();
+            foreach(var kp in coord)
+                converted[kp.Key.ToString()] = kp.Value;
+            return Json(converted);
         }
 
         private ulong[] strToUint(string str)
@@ -47,8 +59,6 @@ namespace OpalLocation.Controllers
 
         public IActionResult Contact()
         {
-            ViewData["Message"] = "Your contact page.";
-
             return View();
         }
 

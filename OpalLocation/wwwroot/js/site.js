@@ -287,6 +287,8 @@ $(document).ready(function () {
                 let lat = data[loc].coordinate.latitude;
                 let lon = data[loc].coordinate.longitude;
                 let occu = data[loc].occupancy;
+                if (!occu)
+                    occu = ' ';
 
                 if (recenter) {
                     sumLat += lat;
