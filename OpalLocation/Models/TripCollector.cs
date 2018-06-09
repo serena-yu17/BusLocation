@@ -1,10 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,10 +13,10 @@ namespace OpalLocation.Models
 {
     public class TripInfo
     {
-        public uint tripID { get; set; }
+        public ulong tripID { get; set; }
         public string direction { get; set; }
 
-        public TripInfo(uint tripID, string direction)
+        public TripInfo(ulong tripID, string direction)
         {
             this.tripID = tripID;
             this.direction = direction;
@@ -63,15 +63,23 @@ namespace OpalLocation.Models
 
     public static class TripData
     {
-        const string locationPattern = @"entity\s*?{[\s\S]+?vehicle\s*?{[\s\S]+?trip\s*?{[\s\S]+?trip_id:\s*?""(\d+)""[\s\S]+?position\s*?{[\s\S]+?latitude:\s*?([\d-\.]+)[\s\S]+?longitude:\s*?([\d\.-]+)[\s\S]+?occupancy_status:\s*?([\w_]+)";
+        const string locationPattern = @"trip_id: ""([\w\.\-]+)""[\s\S]+?latitude: ([\d-\.]+)[\s\S]+?longitude: ([\d\.-]+)";
         static Regex locationRegex = new Regex(locationPattern, RegexOptions.Compiled | RegexOptions.Singleline);
+        const string occuPattern = @"occupancy_status: ([\w-]+)";
+        static Regex occuRegex = new Regex(occuPattern, RegexOptions.Compiled | RegexOptions.Singleline);
 
-        public static Dictionary<uint, List<TripLoc>> locations = new Dictionary<uint, List<TripLoc>>();
+        const string positionUrl = @"https://api.transport.nsw.gov.au/v1/gtfs/vehiclepos/buses?debug=true";
+        const string tripUrl = @"https://api.transport.nsw.gov.au/v1/gtfs/schedule/buses";
+
+        const string bus = "buses";
+        const string train = "sydneytrains";
+
+        public static Dictionary<ulong, List<TripLoc>> locations = new Dictionary<ulong, List<TripLoc>>();
 
         //trips key: RouteNo e.g. "370", value: Tuple Item1: direction, Item2: tripID
         static Dictionary<string, List<TripInfo>> trips = new Dictionary<string, List<TripInfo>>();
         static Dictionary<uint, Coordinate> stopLocations = new Dictionary<uint, Coordinate>();
-        static Dictionary<uint, List<uint>> tripStops = new Dictionary<uint, List<uint>>();
+        static Dictionary<ulong, uint[]> tripStops = new Dictionary<ulong, uint[]>();
 
         static Task tripTsk = null;
         static object tripLock = new object();
@@ -98,13 +106,13 @@ namespace OpalLocation.Models
             locTimer.Start();
         }
 
-        public static Dictionary<string, uint[]> getTrip(string route)
+        public static Dictionary<string, ulong[]> getTrip(string route)
         {
             if (trips.Count == 0 && tripTsk != null && !tripTsk.IsCompleted)
                 tripTsk.Wait();
             if (locations.Count == 0 && locTsk != null && !locTsk.IsCompleted)
                 locTsk.Wait();
-            Dictionary<string, HashSet<uint>> tripCollection = new Dictionary<string, HashSet<uint>>();
+            Dictionary<string, HashSet<ulong>> tripCollection = new Dictionary<string, HashSet<ulong>>();
             var routeTrimmed = route.Trim().ToUpper();
             if (trips.ContainsKey(routeTrimmed))
             {
@@ -114,17 +122,17 @@ namespace OpalLocation.Models
                     if (locations.ContainsKey(t.tripID))
                     {
                         if (!tripCollection.ContainsKey(t.direction))
-                            tripCollection[t.direction] = new HashSet<uint>();
+                            tripCollection[t.direction] = new HashSet<ulong>();
                         tripCollection[t.direction].Add(t.tripID);
                     }
             }
-            Dictionary<string, uint[]> res = new Dictionary<string, uint[]>();
+            Dictionary<string, ulong[]> res = new Dictionary<string, ulong[]>();
             foreach (var kp in tripCollection)
                 res[kp.Key] = kp.Value.ToArray();
             return res;
         }
 
-        public static TripLoc[] getLoc(uint[] tripIDs)
+        public static TripLoc[] getLoc(ulong[] tripIDs)
         {
             if (locations.Count == 0 && locTsk != null && !locTsk.IsCompleted)
                 locTsk.Wait();
@@ -135,12 +143,14 @@ namespace OpalLocation.Models
             return res.ToArray();
         }
 
-        public static Coordinate[] getStops(uint[] tripIDs)
+        public static Dictionary<ulong, Coordinate[]> getStops(ulong[] tripIDs)
         {
             if (trips.Count == 0 && tripTsk != null && !tripTsk.IsCompleted)
                 tripTsk.Wait();
-            HashSet<Coordinate> coordinates = new HashSet<Coordinate>();
+            Dictionary<ulong, Coordinate[]> res = new Dictionary<ulong, Coordinate[]>();
             foreach (var trip in tripIDs)
+            {
+                HashSet<Coordinate> coordinates = new HashSet<Coordinate>();
                 if (tripStops.ContainsKey(trip))
                 {
                     var stops = tripStops[trip];
@@ -151,7 +161,9 @@ namespace OpalLocation.Models
                             coordinates.Add(coord);
                         }
                 }
-            return coordinates.ToArray();
+                res[trip] = coordinates.ToArray();
+            }
+            return res;
         }
 
         static void loadTrip()
@@ -171,194 +183,419 @@ namespace OpalLocation.Models
 
         static async Task getLocation()
         {
-            Dictionary<uint, List<TripLoc>> newLoc = new Dictionary<uint, List<TripLoc>>();
+            await Task.WhenAll(new Task[]{
+                 getLocation(bus),
+                 getLocation(train)
+            });
+        }
+
+        static async Task getTripInfo()
+        {
+            await Task.WhenAll(new Task[]{
+                 getTripInfo(bus),
+                 getTripInfo(train)
+            });
+        }
+
+        static string stripID(string tripID)
+        {
+            StringBuilder sb = new StringBuilder();
+            foreach (var ch in tripID)
+                if (Char.IsDigit(ch))
+                    sb.Append(ch);
+            return sb.ToString();
+        }
+
+        static async Task getLocation(string type)
+        {
+            Dictionary<ulong, List<TripLoc>> newLoc = new Dictionary<ulong, List<TripLoc>>();
             using (HttpClient client = new HttpClient())
             {
                 client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("apikey", "");
-                var res = await client.GetAsync(@"https://api.transport.nsw.gov.au/v1/gtfs/vehiclepos/buses?debug=true");
+                var url = positionUrl;
+                if (type != bus)
+                    url = url.Replace(bus, type);
+                var res = await client.GetAsync(url);
                 using (var contentStream = await res.Content.ReadAsStreamAsync())
                 using (StreamReader sr = new StreamReader(contentStream))
                 {
                     var text = await sr.ReadToEndAsync();
                     Console.WriteLine(text);
-                    var matches = locationRegex.Matches(text);
-                    foreach (Match m in matches)
-                        if (m.Success && m.Groups.Count > 4)
+                    MatchCollection locMatches = locationRegex.Matches(text);
+                    MatchCollection occuMatches = null;
+                    if (type == bus)
+                        occuMatches = occuRegex.Matches(text);
+                    for (int i = 0; i < locMatches.Count; i++)
+                    {
+                        Match m = locMatches[i];
+                        if (m.Success && m.Groups.Count > 3)
                         {
                             var tripIDStr = m.Groups[1].Value;
                             var latitudeStr = m.Groups[2].Value;
                             var longitudeStr = m.Groups[3].Value;
-                            var occup = m.Groups[4].Value;
-                            if (uint.TryParse(tripIDStr, out uint tripID) &&
+                            string occup = null;
+                            if (type == bus && occuMatches[i].Success && occuMatches[i].Groups.Count > 1)
+                                occup = occuMatches[i].Groups[1].Value.Replace('_', ' ').ToLower().Replace("available", "").Trim();
+                            if (type == train)
+                                tripIDStr = stripID(tripIDStr);
+                            if (ulong.TryParse(tripIDStr, out ulong tripID) &&
                                 decimal.TryParse(latitudeStr, out decimal latitude) &&
                                 decimal.TryParse(longitudeStr, out decimal longitude))
                             {
                                 TripLoc trip = new TripLoc()
                                 {
                                     coordinate = new Coordinate(latitude, longitude),
-                                    occupancy = occup.Replace('_', ' ').ToLower()
+                                    occupancy = occup
                                 };
                                 if (!newLoc.ContainsKey(tripID))
                                     newLoc[tripID] = new List<TripLoc>();
                                 newLoc[tripID].Add(trip);
                             }
                         }
+                    }
                 }
             }
             Interlocked.Exchange(ref locations, newLoc);
         }
 
-        const string quotePattern = @"""([^""]*?)""";
-        static Regex quoteRegex = new Regex(quotePattern, RegexOptions.Compiled | RegexOptions.Singleline);
-
-        static async Task getTripInfo()
+        static async Task getTripInfo(string type)
         {
             using (HttpClient client = new HttpClient())
             {
                 client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("apikey", "BusSettings.busStopKey");
-                var res = await client.GetAsync(@"https://api.transport.nsw.gov.au/v1/gtfs/schedule/buses");
+                var url = tripUrl;
+                if (type != bus)
+                    url = url.Replace(bus, type);
+                var res = await client.GetAsync(url);
+
+                char[] buffer = new char[10000];
+                Dictionary<string, string> routeID = new Dictionary<string, string>();
+
                 using (var contentStream = await res.Content.ReadAsStreamAsync())
                 using (ZipArchive zip = new ZipArchive(contentStream))
+                {
+                    foreach (var entry in zip.Entries)
+                    {
+                        if (entry.Name.StartsWith("routes"))
+                        {
+                            using (var stream = entry.Open())
+                            using (StreamReader rd = new StreamReader(stream))
+                            {
+                                uint quoteCount = 0;
+                                uint contentCount = 0;
+                                uint cycle = 1;
+                                List<char> content = new List<char>();
+                                ulong i = 0;
+                                string routeIDStr = null, shortName = null;
+                                while (true)
+                                {
+                                    int chars = await rd.ReadAsync(buffer, 0, buffer.Length);
+                                    if (chars == 0)
+                                        break;
+                                    var start = i;      //skip titles
+                                    if (i == 0)
+                                    {
+                                        for (; i < (ulong)chars && buffer[i] != '\n'; i++)
+                                            if (buffer[i] == ',')
+                                                cycle++;
+                                    }
+                                    for (; i < (ulong)chars + start; i++)
+                                    {
+                                        if (buffer[i - start] == '"')
+                                        {
+                                            quoteCount++;
+                                            if (quoteCount % 2 == 1)
+                                            {
+                                                contentCount++;
+                                                content.Clear();
+                                            }
+                                            else
+                                            {
+                                                switch ((contentCount - 1) % cycle)
+                                                {
+                                                    case 0:
+                                                        routeIDStr = new string(content.ToArray()).Trim().ToUpper();
+                                                        break;
+                                                    case 2:
+                                                        shortName = new string(content.ToArray()).Trim().ToUpper();
+                                                        if (routeIDStr != null && shortName != null)
+                                                            routeID[routeIDStr] = shortName;
+                                                        routeIDStr = null;
+                                                        shortName = null;
+                                                        break;
+                                                }
+                                            }
+                                        }
+                                        else if (quoteCount % 2 == 1)
+                                            content.Add(buffer[i - start]);
+                                    }
+                                }
+                            }
+                            break;
+                        }
+                    }
                     foreach (var entry in zip.Entries)
                     {
                         if (entry.Name.StartsWith("trips"))
                         {
                             Dictionary<string, List<TripInfo>> newTrips = new Dictionary<string, List<TripInfo>>();
                             using (var stream = entry.Open())
-                            using (MemoryStream ms = new MemoryStream())
+                            using (StreamReader rd = new StreamReader(stream))
                             {
-                                await stream.CopyToAsync(ms);
-                                ms.Seek(0, SeekOrigin.Begin);
-                                using (StreamReader rd = new StreamReader(ms))
+                                string route = null, desc = null;
+                                ulong tripID = 0;
+                                ulong i = 0;
+                                uint cycle = 1;
+                                uint quoteCount = 0;
+                                uint contentCount = 0;
+                                List<char> content = new List<char>();
+                                while (true)
                                 {
-                                    var text = await rd.ReadToEndAsync();
-                                    var matches = quoteRegex.Matches(text);
-                                    int i = 0;
-                                    string route = null, desc = null;
-                                    uint tripID = 0;
-                                    foreach (Match m in matches)
+                                    int chars = await rd.ReadAsync(buffer, 0, buffer.Length);
+                                    if (chars == 0)
+                                        break;
+                                    var start = i;      //skip titles
+                                    if (i == 0)
                                     {
-                                        if (m.Success && m.Groups.Count > 1)
-                                            switch (i % 10)
+                                        for (; i < (ulong)chars && buffer[i] != '\n'; i++)
+                                            if (buffer[i] == ',')
+                                                cycle++;
+                                    }
+                                    for (; i < (ulong)chars + start; i++)
+                                    {
+                                        if (buffer[i - start] == '"')
+                                        {
+                                            quoteCount++;
+                                            if (quoteCount % 2 == 1)
                                             {
-                                                case 0:
-                                                    var routeStr = m.Groups[1].Value;
-                                                    int j = 0;
-                                                    while (j < routeStr.Length - 1 && routeStr[j] != '_')
-                                                        j++;
-                                                    if (j < routeStr.Length - 1)
-                                                        route = routeStr.Substring(j + 1, routeStr.Length - j - 1).Trim().ToUpper();
-                                                    break;
-                                                case 2:
-                                                    var tripStr = m.Groups[1].Value;
-                                                    uint.TryParse(tripStr, out tripID);
-                                                    if (tripID >= 607400 && tripID < 607642)
-                                                        Trace.WriteLine(route + ": " + tripID.ToString());
-                                                    break;
-                                                case 9:
-                                                    desc = m.Groups[1].Value;
-                                                    if (!string.IsNullOrEmpty(route) && !string.IsNullOrEmpty(desc) && tripID != 0)
-                                                    {
-                                                        if (!newTrips.ContainsKey(route))
-                                                            newTrips[route] = new List<TripInfo>();
-                                                        newTrips[route].Add(new TripInfo(tripID, desc));
-                                                        route = null;
-                                                        desc = null;
-                                                        tripID = 0;
-                                                    }
-                                                    break;
+                                                contentCount++;
+                                                content.Clear();
                                             }
-                                        i++;
+                                            else
+                                            {
+                                                switch ((contentCount - 1) % cycle)
+                                                {
+                                                    case 0:
+                                                        var routeIDStr = new string(content.ToArray()).Trim().ToUpper();
+                                                        if (routeID.ContainsKey(routeIDStr))
+                                                            route = routeID[routeIDStr];
+                                                        break;
+                                                    case 2:
+                                                        var tripStr = new string(content.ToArray());
+                                                        if (type == train)
+                                                            tripStr = stripID(tripStr);
+                                                        ulong.TryParse(tripStr, out tripID);
+                                                        break;
+                                                    case 3:
+                                                        if (type == train)
+                                                        {
+                                                            desc = new string(content.ToArray());
+                                                            if (!string.IsNullOrEmpty(route) && !string.IsNullOrEmpty(desc) && tripID != 0)
+                                                            {
+                                                                if (!newTrips.ContainsKey(route))
+                                                                    newTrips[route] = new List<TripInfo>();
+                                                                newTrips[route].Add(new TripInfo(tripID, desc));
+                                                            }
+                                                            route = null;
+                                                            desc = null;
+                                                            tripID = 0;
+                                                        }
+                                                        break;
+                                                    case 9:
+                                                        if (type == bus)
+                                                        {
+                                                            desc = new string(content.ToArray());
+                                                            if (!string.IsNullOrEmpty(route) && !string.IsNullOrEmpty(desc) && tripID != 0)
+                                                            {
+                                                                if (!newTrips.ContainsKey(route))
+                                                                    newTrips[route] = new List<TripInfo>();
+                                                                newTrips[route].Add(new TripInfo(tripID, desc));
+                                                            }
+                                                            route = null;
+                                                            desc = null;
+                                                            tripID = 0;
+                                                        }
+                                                        break;
+                                                }
+                                            }
+                                        }
+                                        else if (quoteCount % 2 == 1)
+                                            content.Add(buffer[i - start]);
                                     }
                                 }
                             }
-                            Interlocked.Exchange(ref trips, newTrips);
+                            var old = Interlocked.Exchange(ref trips, newTrips);
+                            if (old != null)
+                                old.Clear();
+                            routeID.Clear();
                         }
                         else if (entry.Name.StartsWith("stop_times"))
                         {
-                            Dictionary<uint, HashSet<uint>> tempStops = new Dictionary<uint, HashSet<uint>>();
+                            Dictionary<ulong, HashSet<uint>> tempStops = new Dictionary<ulong, HashSet<uint>>();
                             using (var stream = entry.Open())
-                            using (MemoryStream ms = new MemoryStream())
+                            using (StreamReader rd = new StreamReader(stream))
                             {
-                                await stream.CopyToAsync(ms);
-                                ms.Seek(0, SeekOrigin.Begin);
-                                using (StreamReader rd = new StreamReader(ms))
+                                uint quoteCount = 0;
+                                uint contentCount = 0;
+                                uint cycle = 1;
+                                List<char> content = new List<char>();
+                                ulong i = 0;
+                                ulong tripID = 0;
+                                uint stopID = 0;
+                                while (true)
                                 {
-                                    var text = await rd.ReadToEndAsync();
-                                    var matches = quoteRegex.Matches(text);
-                                    int i = 0;
-                                    uint tripID = 0, stopID = 0;
-                                    foreach (Match m in matches)
+                                    int chars = await rd.ReadAsync(buffer, 0, buffer.Length);
+                                    if (chars == 0)
+                                        break;
+                                    var start = i;      //skip titles
+                                    if (i == 0)
                                     {
-                                        if (m.Success && m.Groups.Count > 1)
-                                            switch (i % 11)
+                                        for (; i < (ulong)chars && buffer[i] != '\n'; i++)
+                                            if (buffer[i] == ',')
+                                                cycle++;
+                                    }
+                                    for (; i < (ulong)chars + start; i++)
+                                    {
+                                        if (buffer[i - start] == '"')
+                                        {
+                                            quoteCount++;
+                                            if (quoteCount % 2 == 1)
                                             {
-                                                case 0:
-                                                    var tripStr = m.Groups[1].Value;
-                                                    uint.TryParse(tripStr, out tripID);
-                                                    break;
-                                                case 3:
-                                                    var stopStr = m.Groups[1].Value;
-                                                    uint.TryParse(stopStr, out stopID);
-                                                    if (stopID != 0 && tripID != 0)
-                                                    {
-                                                        if (!tempStops.ContainsKey(tripID))
-                                                            tempStops[tripID] = new HashSet<uint>();
-                                                        tempStops[tripID].Add(stopID);
-                                                    }
-                                                    break;
+                                                contentCount++;
+                                                content.Clear();
                                             }
-                                        i++;
+                                            else
+                                            {
+                                                switch ((contentCount - 1) % cycle)
+                                                {
+                                                    case 0:
+                                                        var tripStr = new string(content.ToArray());
+                                                        if (type == train)
+                                                            tripStr = stripID(tripStr);
+                                                        ulong.TryParse(tripStr, out tripID);
+                                                        break;
+                                                    case 3:
+                                                        var stopStr = new string(content.ToArray());
+                                                        uint.TryParse(stopStr, out stopID);
+                                                        if (stopID != 0 && tripID != 0)
+                                                        {
+                                                            if (!tempStops.ContainsKey(tripID))
+                                                                tempStops[tripID] = new HashSet<uint>();
+                                                            tempStops[tripID].Add(stopID);
+                                                        }
+                                                        tripID = 0;
+                                                        stopID = 0;
+                                                        break;
+                                                }
+                                            }
+                                        }
+                                        else if (quoteCount % 2 == 1)
+                                            content.Add(buffer[i - start]);
                                     }
                                 }
                             }
-                            Dictionary<uint, List<uint>> newTripStops = new Dictionary<uint, List<uint>>();
+                            Dictionary<ulong, uint[]> newTripStops = new Dictionary<ulong, uint[]>();
                             foreach (var kp in tempStops)
-                                newTripStops[kp.Key] = new List<uint>(kp.Value);
-                            Interlocked.Exchange(ref tripStops, newTripStops);
+                                newTripStops[kp.Key] = kp.Value.ToArray();
+                            var old = Interlocked.Exchange(ref tripStops, newTripStops);
+                            if (old != null)
+                                old.Clear();
                         }
                         else if (entry.Name.StartsWith("stops"))
                         {
                             Dictionary<uint, Coordinate> newStopLocations = new Dictionary<uint, Coordinate>();
                             using (var stream = entry.Open())
-                            using (MemoryStream ms = new MemoryStream())
+                            using (StreamReader rd = new StreamReader(stream))
                             {
-                                await stream.CopyToAsync(ms);
-                                ms.Seek(0, SeekOrigin.Begin);
-                                using (StreamReader rd = new StreamReader(ms))
+                                uint quoteCount = 0;
+                                uint contentCount = 0;
+                                uint cycle = 1;
+                                List<char> content = new List<char>();
+                                ulong i = 0;
+                                decimal lat = 0, lon = 0;
+                                uint stopID = 0;
+                                while (true)
                                 {
-                                    var text = await rd.ReadToEndAsync();
-                                    var matches = quoteRegex.Matches(text);
-                                    int i = 0;
-                                    decimal lat = 0, lon = 0;
-                                    uint stopID = 0;
-                                    foreach (Match m in matches)
+                                    int chars = await rd.ReadAsync(buffer, 0, buffer.Length);
+                                    if (chars == 0)
+                                        break;
+                                    var start = i;      //skip titles
+                                    if (i == 0)
                                     {
-                                        if (m.Success && m.Groups.Count > 1)
-                                            switch (i % 7)
+                                        for (; i < (ulong)chars && buffer[i] != '\n'; i++)
+                                            if (buffer[i] == ',')
+                                                cycle++;
+                                    }
+                                    for (; i < (ulong)chars + start; i++)
+                                    {
+                                        if (buffer[i - start] == '"')
+                                        {
+                                            quoteCount++;
+                                            if (quoteCount % 2 == 1)
                                             {
-                                                case 0:
-                                                    var stopStr = m.Groups[1].Value;
-                                                    uint.TryParse(stopStr, out stopID);
-                                                    break;
-                                                case 2:
-                                                    var latStr = m.Groups[1].Value;
-                                                    decimal.TryParse(latStr, out lat);
-                                                    break;
-                                                case 3:
-                                                    var lonStr = m.Groups[1].Value;
-                                                    decimal.TryParse(lonStr, out lon);
-                                                    if (stopID != 0 && lat != 0 && lon != 0)
-                                                        newStopLocations[stopID] = new Coordinate(lat, lon);
-                                                    break;
+                                                contentCount++;
+                                                content.Clear();
                                             }
-                                        i++;
+                                            else
+                                            {
+                                                switch ((contentCount - 1) % cycle)
+                                                {
+                                                    case 0:
+                                                        var stopStr = new string(content.ToArray());
+                                                        uint.TryParse(stopStr, out stopID);
+                                                        break;
+                                                    case 2:
+                                                        if (type == bus)
+                                                        {
+                                                            var latStr = new string(content.ToArray());
+                                                            decimal.TryParse(latStr, out lat);
+                                                        }
+                                                        break;
+                                                    case 3:
+                                                        if (type == bus)
+                                                        {
+                                                            var lonStr = new string(content.ToArray());
+                                                            decimal.TryParse(lonStr, out lon);
+                                                            if (stopID != 0 && lat != 0 && lon != 0)
+                                                                newStopLocations[stopID] = new Coordinate(lat, lon);
+                                                            lat = 0;
+                                                            lon = 0;
+                                                            stopID = 0;
+                                                        }
+                                                        break;
+                                                    case 4:
+                                                        if (type == train)
+                                                        {
+                                                            var latStr = new string(content.ToArray());
+                                                            decimal.TryParse(latStr, out lat);
+                                                        }
+                                                        break;
+                                                    case 5:
+                                                        if (type == train)
+                                                        {
+                                                            var lonStr = new string(content.ToArray());
+                                                            decimal.TryParse(lonStr, out lon);
+                                                            if (stopID != 0 && lat != 0 && lon != 0)
+                                                                newStopLocations[stopID] = new Coordinate(lat, lon);
+                                                            lat = 0;
+                                                            lon = 0;
+                                                            stopID = 0;
+                                                        }
+                                                        break;
+                                                }
+                                            }
+                                        }
+                                        else if (quoteCount % 2 == 1)
+                                            content.Add(buffer[i - start]);
                                     }
                                 }
                             }
-                            Interlocked.Exchange(ref stopLocations, newStopLocations);
+                            var old = Interlocked.Exchange(ref stopLocations, newStopLocations);
+                            if (old != null)
+                                old.Clear();
                         }
                     }
+                }
             }
         }
     }

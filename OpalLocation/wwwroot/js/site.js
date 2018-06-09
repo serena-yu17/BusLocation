@@ -8,57 +8,54 @@
     '`': '&#x60;',
     '=': '&#x3D;'
 };
-
-var map;
-
-
 function escapeHtml(string) {
     return String(string).replace(/[&<>"'`=\/]/g, function (s) {
         return entityMap[s];
     });
 }
 
-function initMap() {
-    map = new google.maps.Map(document.getElementById('map'),
-        {
-            zoom: 13
-        }
-    );
+$(document).ready(function () {
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(function (position) {
             initialLocation = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
             map.setCenter(initialLocation);
         });
     }
-}
-
-$(window).on('load', function () {
     const busIcon = {
         url: "/images/Bus.svg",
         scaledSize: new google.maps.Size(30, 30),
         origin: new google.maps.Point(0, 0),
-        anchor: new google.maps.Point(10, 10),
+        anchor: new google.maps.Point(15, 15),
         labelOrigin: new google.maps.Point(0, -5)
     }
 
     const userIcon = {
         url: "/images/crosshair.svg",
-        scaledSize: new google.maps.Size(40, 40),
+        scaledSize: new google.maps.Size(20, 20),
+        origin: new google.maps.Point(0, 0),
+        anchor: new google.maps.Point(20, 20),
+        labelOrigin: new google.maps.Point(15, -5)
+    }
+
+    const stopIcon = {
+        url: "/images/stop.svg",
+        scaledSize: new google.maps.Size(15, 15),
         origin: new google.maps.Point(0, 0),
         anchor: new google.maps.Point(5, 5),
-        labelOrigin: new google.maps.Point(10, -5)
     }
 
     var options = {};
     var markers = [];
     var refreshInterval = null;
     var timeOut = null;
-    var markersInUse = [];
     var tripStops = {};
+    var tripStopSigs = {};
     var availStops = new Set();
+    var stopMarkers = [];
 
     setInterval(function () {
         tripStops = {};
+        tripStopSigs = {};
         availStops.clear();
     }, 1000 * 3600 * 24);
 
@@ -76,11 +73,11 @@ $(window).on('load', function () {
 
     document.getElementById('submit').onclick = function () {
         event.preventDefault();
+        getLoc(true);
         refreshLoc();
     };
 
     function refreshLoc() {
-        getLoc();
         refreshInterval = setInterval(function () {
             if (document.getElementById('map').classList.contains('hidden')) {
                 if (refreshInterval)
@@ -111,38 +108,7 @@ $(window).on('load', function () {
                     route: route
                 },
                 success: function (data) {
-                    if (!data)
-                        return;
-                    let isEmpty = true;
-                    for (let trip in data)
-                        if (data.hasOwnProperty(trip)) {
-                            isEmpty = false;
-                            break;
-                        }
-                    if (isEmpty) {
-                        document.getElementById('directionForm').classList.add('hidden');
-                        return;
-                    }
-                    document.getElementById('directionForm').classList.remove('hidden');
-                    let count = 0;
-                    for (let trip in data)
-                        if (data.hasOwnProperty(trip)) {
-                            let lbl = document.createElement('label');
-                            lbl.classList.add("form-control");
-                            let radID = "directionRadio" + count.toString();
-                            let html = '<input type="radio" name="direction" id="' + radID + '"/> ' + escapeHtml(trip);
-                            if (count === 0)
-                                html = '<input type="radio" name="direction" id="' + radID + '" checked/> ' + escapeHtml(trip);
-                            lbl.innerHTML = html;
-                            let id = "directionOption" + count.toString();
-                            lbl.id = id;
-                            document.getElementById('directionOptions').appendChild(lbl);
-                            options[id] = {
-                                radID: radID,
-                                trips: data[trip]
-                            };
-                            count++;
-                        }
+                    renderTrip(data);
                 },
                 error: function (msg) {
                     console.log(msg);
@@ -155,7 +121,7 @@ $(window).on('load', function () {
         }
     }
 
-    function getLoc() {
+    function getLoc(recenter = false) {
         let tripArr = null;
         for (let op in options)
             if (options.hasOwnProperty(op)) {
@@ -168,71 +134,25 @@ $(window).on('load', function () {
             }
         if (tripArr !== null && tripArr.length !== 0) {
             let tripStrArr = [];
-            for (let i = 0; i < tripArr.length; i++)
+            let tripsToUpd = [];
+            for (let i = 0; i < tripArr.length; i++) {
                 tripStrArr.push(tripArr[i].toString());
-            let data = {
-                tripIDs: tripStrArr.join(",")
+                if (!tripStops.hasOwnProperty(tripArr[i]))
+                    tripsToUpd.push(tripArr[i]);
             }
-            document.getElementById('submit').disabled = true;
+            getStops(tripsToUpd, tripArr);
+            let data = {
+                tripIDs: tripStrArr.join(',')
+            }
+            if (recenter)
+                document.getElementById('submit').disabled = true;
             $.ajax({
                 type: "GET",
                 url: locUrl,
                 data: data,
+                cache: false,
                 success: function (data) {
-                    if (!data)
-                        return;
-                    let isEmpty = true;
-                    for (let trip in data)
-                        if (data.hasOwnProperty(trip)) {
-                            isEmpty = false;
-                            break;
-                        }
-                    if (isEmpty) {
-                        document.getElementById('map').classList.add('hidden');
-                        return;
-                    }
-                    document.getElementById('map').classList.remove('hidden');
-
-                    for (let i = 0; i < markers.length; i++)
-                        markers[i].setMap(null);
-                    markers.length = 0;
-
-                    for (let loc in data)
-                        if (data.hasOwnProperty(loc)) {
-                            let lat = data[loc].coordinate.latitude;
-                            let lon = data[loc].coordinate.longitude;
-                            let occu = data[loc].occupancy;
-
-                            let marker = new google.maps.Marker({
-                                position: new google.maps.LatLng(lat, lon),
-                                icon: busIcon,
-                                label: {
-                                    text: occu,
-                                    color: "#BE1616",
-                                    fontSize: "16px",
-                                    fontWeight: "bold"
-                                },
-                                map: map
-                            });
-                            markers.push(marker);
-                        }
-
-                    if (navigator.geolocation) {
-                        navigator.geolocation.getCurrentPosition(function (position) {
-                            userLoc = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
-                            let marker = new google.maps.Marker({
-                                position: userLoc,
-                                icon: userIcon,
-                                label: {
-                                    text: 'I am here',
-                                    color: '#2916BE',
-                                    fontSize: "16px",
-                                    fontWeight: "bold"
-                                },
-                                map: map
-                            });
-                        });
-                    }
+                    renderMarkers(data, recenter);
                 },
                 error: function (msg) {
                     console.log(msg);
@@ -244,31 +164,201 @@ $(window).on('load', function () {
         }
     }
 
-    function getStops(tripID) {
+    function getStops(tripIDToUpd, tripArr) {
+        var tripsToUpdStr = [];
+        for (let i = 0; i < tripIDToUpd.length; i++) {
+            tripsToUpdStr.push(tripIDToUpd[i].toString());
+        }
         $.ajax({
             type: "GET",
             url: stopUrl,
             data: {
-                tripID: tripID
+                tripIDs: tripsToUpdStr.join(',')
             },
             success: function (data) {
                 if (!data || data.length === 0)
                     return;
-                for (let i = 0; i < data.length; i++) {
-                    var coord = data[i];
-                    var coordSig = coord.latitude.toString() + "^" + coord.longitude.toString();
-                    if (!availStops.has(coordSig)) {
-                        if (!tripStops.hasOwnProperty(tripID))
-                            tripStops[tripID] = [];
-                        tripStops[tripID].push(coord);
-                        availStops.add(coordSig);
+                for (let trip in data)
+                    if (data.hasOwnProperty(trip)) {
+                        var coord = data[trip];
+                        if (!tripStops.hasOwnProperty(trip))
+                            tripStops[trip] = [];
+                        if (!tripStopSigs.hasOwnProperty(trip))
+                            tripStopSigs[trip] = new Set();
+                        for (let i = 0; i < coord.length; i++) {
+                            var coordSig = coord[i].latitude.toString() + "&" + coord[i].longitude.toString();
+                            if (!tripStopSigs[trip].has(coordSig)) {
+                                tripStops[trip].push(coord[i]);
+                                tripStopSigs[trip].add(coordSig);
+                            }
+                        }
                     }
-                }                
+                renderStops(tripArr);
             },
             error: function (msg) {
                 console.log(msg);
             }
         });
+    }
+
+    function renderStops(tripIDs) {
+        for (let i = 0; i < stopMarkers.length; i++)
+            stopMarkers[i].setMap(null);
+        stopMarkers.length = 0;
+        if (!tripIDs || tripIDs.length === 0)
+            return;
+        let usedStops = new Set();
+        for (let i = 0; i < tripIDs.length; i++)
+            if (tripStops.hasOwnProperty(tripIDs[i]) && tripStops[tripIDs[i]]) {
+                var stops = tripStops[tripIDs[i]];
+                for (let j = 0; j < stops.length; j++) {
+                    let key = stops[j].latitude.toString() + "&" + stops[j].longitude.toString();
+                    if (!usedStops.has(key)) {
+                        let marker = new google.maps.Marker({
+                            position: new google.maps.LatLng(stops[j].latitude, stops[j].longitude),
+                            icon: stopIcon,
+                            map: map
+                        });
+                        stopMarkers.push(marker);
+                        usedStops.add(key);
+                    }
+                }
+            }
+    }
+
+    function renderTrip(data) {
+        if (!data)
+            return;
+        let isEmpty = true;
+        for (let trip in data)
+            if (data.hasOwnProperty(trip)) {
+                isEmpty = false;
+                break;
+            }
+        if (isEmpty) {
+            document.getElementById('directionForm').classList.add('hidden');
+            return;
+        }
+        document.getElementById('directionForm').classList.remove('hidden');
+        let count = 0;
+        for (let trip in data)
+            if (data.hasOwnProperty(trip)) {
+                let lbl = document.createElement('label');
+                lbl.classList.add("form-control");
+                let radID = "directionRadio" + count.toString();
+                let html = '<input type="radio" name="direction" id="' + radID + '"/> ' + escapeHtml(trip);
+                if (count === 0)
+                    html = '<input type="radio" name="direction" id="' + radID + '" checked/> ' + escapeHtml(trip);
+                lbl.innerHTML = html;
+                let id = "directionOption" + count.toString();
+                lbl.id = id;
+                document.getElementById('directionOptions').appendChild(lbl);
+                options[id] = {
+                    radID: radID,
+                    trips: data[trip]
+                };
+                count++;
+            }
+    }
+
+    function renderMarkers(data, recenter = false) {
+        if (!data)
+            return;
+        let isEmpty = true;
+        for (let trip in data)
+            if (data.hasOwnProperty(trip)) {
+                isEmpty = false;
+                break;
+            }
+        if (isEmpty) {
+            document.getElementById('map').classList.add('hidden');
+            return;
+        }
+        document.getElementById('map').classList.remove('hidden');
+
+        for (let i = 0; i < markers.length; i++)
+            markers[i].setMap(null);
+        markers.length = 0;
+
+        let sumLat = 0, sumLon = 0, n = 0;
+
+        for (let loc in data)
+            if (data.hasOwnProperty(loc)) {
+                let lat = data[loc].coordinate.latitude;
+                let lon = data[loc].coordinate.longitude;
+                let occu = data[loc].occupancy;
+
+                if (recenter) {
+                    sumLat += lat;
+                    sumLon += lon;
+                    n++;
+                }
+
+                let marker = new google.maps.Marker({
+                    position: new google.maps.LatLng(lat, lon),
+                    icon: busIcon,
+                    label: {
+                        text: occu,
+                        color: "#BE1616",
+                        fontSize: "16px",
+                        fontWeight: "bold"
+                    },
+                    map: map
+                });
+                markers.push(marker);
+            }
+
+        if (recenter) {
+            let centerLat = sumLat / n;
+            let centerLon = sumLon / n;
+            let center = new google.maps.LatLng(centerLat, centerLon);
+            map.setCenter(center);
+        }
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(function (position) {
+                userLoc = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
+                let marker = new google.maps.Marker({
+                    position: userLoc,
+                    icon: userIcon,
+                    label: {
+                        text: 'I am here',
+                        color: '#2916BE',
+                        fontSize: "16px",
+                        fontWeight: "bold"
+                    },
+                    map: map
+                });
+            });
+        }
+    }
+
+    function latRad(lat) {
+        var sin = Math.sin(lat * Math.PI / 180);
+        var radX2 = Math.log((1 + sin) / (1 - sin)) / 2;
+        return Math.max(Math.min(radX2, Math.PI), -Math.PI) / 2;
+    }
+
+    function zoom(mapPx, worldPx, fraction) {
+        return Math.floor(Math.log(mapPx / worldPx / fraction) / Math.LN2);
+    }
+
+    function getBoundsZoomLevel(bounds, mapDim) {
+        var WORLD_DIM = { height: 256, width: 256 };
+        var ZOOM_MAX = 21;
+
+        var ne = bounds.getNorthEast();
+        var sw = bounds.getSouthWest();
+
+        var latFraction = (latRad(ne.lat()) - latRad(sw.lat())) / Math.PI;
+
+        var lngDiff = ne.lng() - sw.lng();
+        var lngFraction = ((lngDiff < 0) ? (lngDiff + 360) : lngDiff) / 360;
+
+        var latZoom = zoom(mapDim.height, WORLD_DIM.height, latFraction);
+        var lngZoom = zoom(mapDim.width, WORLD_DIM.width, lngFraction);
+
+        return Math.min(latZoom, lngZoom, ZOOM_MAX);
     }
 });
 

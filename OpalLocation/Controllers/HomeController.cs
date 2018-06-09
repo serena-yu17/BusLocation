@@ -1,8 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Newtonsoft.Json;
 using OpalLocation.Models;
 using System.Collections.Generic;
-using System.Diagnostics;
 
 namespace OpalLocation.Controllers
 {
@@ -34,13 +32,16 @@ namespace OpalLocation.Controllers
             return Json(coord);
         }
 
-        private uint[] strToUint(string str)
-        {
-            List<uint> arr = new List<uint>();
-            var tripIDSec = str.Split(new char[] { ',', ' ', ';' }, System.StringSplitOptions.RemoveEmptyEntries);
-            foreach (var sec in tripIDSec)
-                if (uint.TryParse(sec, out var id))
-                    arr.Add(id);
+        private ulong[] strToUint(string str)
+        {            
+            List<ulong> arr = new List<ulong>();
+            if (str != null)
+            {
+                var tripIDSec = str.Split(new char[] { ',', ' ', ';' }, System.StringSplitOptions.RemoveEmptyEntries);
+                foreach (var sec in tripIDSec)
+                    if (ulong.TryParse(sec, out var id))
+                        arr.Add(id);
+            }
             return arr.ToArray();
         }
 
