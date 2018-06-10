@@ -1,10 +1,10 @@
-﻿.hidden{
-    visibility:hidden !important;
-    display:none !important;
+﻿.hidden {
+    visibility: hidden !important;
+    display: none !important;
 }
 
-.fade{
-    opacity:0.3;
+.fade {
+    opacity: 0.3;
 }
 
 .map-layout {
@@ -19,3 +19,20 @@
     min-width: 300px;
 }
 
+.input-group-header {
+    width: 100px;    
+}
+
+.main-title {
+    color: #4169e1;
+    font-size: x-large;
+}
+
+.form-headers {
+    color: #a52a2a;
+}
+
+.second-title {
+    color: #a52a2a;
+    font-size: x-large;
+}

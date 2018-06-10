@@ -2,17 +2,15 @@
     ViewData["Title"] = "Bus Locations";
 }
 
-<style>
-    .input-group-header {
-        width: 100px;
-    }
-</style>
-
+<h1 class="main-title">
+    Realtime location for Sydney buses and trains
+</h1>
+<br />
 <form>
     <div class="form-group">
         <div class="input-group mb-3">
             <div class="input-group-prepend">
-                <span class="input-group-text input-text input-group-header">
+                <span class="input-group-text input-text input-group-header form-headers">
                     Bus Route
                 </span>
             </div>
@@ -23,18 +21,12 @@
         </div>
     </div>
 </form>
-<div id="directionForm" class="hidden">
-    <div class="form-group">
-        <div class="input-group mb-3" id="directionOptions">
-            <div class="input-group-prepend">
-                <span class="input-group-text input-text input-group-header">
-                    Direction
-                </span>
-            </div>
-        </div>
+<form>
+    <div id="directionForm" class="hidden">
+        <label for="directionOptions" class="form-headers">Directions:</label>
+        <div class="form-group" id="directionOptions"></div>
     </div>
-</div>
-<br />
+</form>
 <div id="map" class="hidden map-layout">
 </div>
 <div id="prompt" class="hidden"></div>
