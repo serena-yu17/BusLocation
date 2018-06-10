@@ -33,6 +33,9 @@ $(document).ready(function () {
     var userMarker = null;
     var currentRadio = null;
 
+    var zindexBus = 10000;
+    const zindexSelf = 99999;
+
     setInterval(function () {
         tripStops = {};
         tripStopSigs = {};
@@ -68,7 +71,7 @@ $(document).ready(function () {
     };
 
     function busIcon() {
-        var size = Math.min($(document).width(), $(document).height()) * 0.04;
+        var size = Math.max($(document).width(), $(document).height()) * 0.015;
         return {
             url: "/images/Bus.svg",
             scaledSize: new google.maps.Size(size, size),
@@ -79,7 +82,7 @@ $(document).ready(function () {
     }
 
     function userIcon() {
-        var size = Math.min($(document).width(), $(document).height()) * 0.02;
+        var size = Math.max($(document).width(), $(document).height()) * 0.015;
         return {
             url: "/images/crosshair.svg",
             scaledSize: new google.maps.Size(size, size),
@@ -90,7 +93,7 @@ $(document).ready(function () {
     }
 
     function stopIcon() {
-        var size = Math.min($(document).width(), $(document).height()) * 0.015;
+        var size = Math.max($(document).width(), $(document).height()) * 0.006;
         return {
             url: "/images/dot-orange.svg",
             scaledSize: new google.maps.Size(size, size),
@@ -331,8 +334,10 @@ $(document).ready(function () {
                         fontSize: "16px",
                         fontWeight: "bold"
                     },
+                    zIndex: zindexBus,
                     map: map
                 });
+                zindexBus++;
                 markers.push(marker);
             }
 
@@ -357,6 +362,7 @@ $(document).ready(function () {
                         fontSize: "16px",
                         fontWeight: "bold"
                     },
+                    zindex: zindexSelf,
                     map: map
                 });
             });
