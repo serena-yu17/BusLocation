@@ -14,6 +14,8 @@ function escapeHtml(string) {
     });
 }
 
+var map = new google.maps.Map(document.getElementById('map'), { zoom: 13 });
+
 var radioToggle = null;
 
 $(document).ready(function () {
@@ -22,7 +24,7 @@ $(document).ready(function () {
             initialLocation = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
             map.setCenter(initialLocation);
         });
-    } 
+    }
 
     var options = {};
     var markers = [];
@@ -54,7 +56,7 @@ $(document).ready(function () {
             }
         options = {};
         getRoute();
-    }   
+    }
 
     document.getElementById("route").onfocus = function () {
         document.getElementById("directionForm").classList.add("fade");
@@ -66,7 +68,7 @@ $(document).ready(function () {
         document.getElementById("map").classList.remove("fade");
     };
 
-    radioToggle = function(caller) {
+    radioToggle = function (caller) {
         getLoc(true);
         refreshLoc();
     }
@@ -147,7 +149,7 @@ $(document).ready(function () {
         }
     }
 
-    function getLoc(recenter) {
+    function getLoc(isFreshLoad) {
         var tripArr = null;
         for (var op in options)
             if (options.hasOwnProperty(op)) {
@@ -163,10 +165,11 @@ $(document).ready(function () {
             var tripsToUpd = [];
             for (var i = 0; i < tripArr.length; i++) {
                 tripStrArr.push(tripArr[i].toString());
-                if (!tripStops.hasOwnProperty(tripArr[i]))
+                if (!tripStops.hasOwnProperty(tripArr[i]) && isFreshLoad)
                     tripsToUpd.push(tripArr[i]);
             }
-            getStops(tripsToUpd, tripArr);
+            if (isFreshLoad)
+                getStops(tripsToUpd, tripArr);
             var data = {
                 tripIDs: tripStrArr.join(',')
             }
@@ -176,7 +179,7 @@ $(document).ready(function () {
                 data: data,
                 cache: false,
                 success: function (data) {
-                    renderMarkers(data, recenter);
+                    renderMarkers(data, isFreshLoad);
                 },
                 error: function (msg) {
                     console.log(msg);
@@ -277,7 +280,7 @@ $(document).ready(function () {
                 options[id] = {
                     radID: radID,
                     trips: data[trip]
-                };                   
+                };
                 count++;
             }
         if (document.getElementById('directionRadio0'))
@@ -285,7 +288,7 @@ $(document).ready(function () {
         radioToggle();
     }
 
-    function renderMarkers(data, recenter) {
+    function renderMarkers(data, isFreshLoad) {
         if (!data)
             return;
         var isEmpty = true;
@@ -302,11 +305,11 @@ $(document).ready(function () {
         }
         document.getElementById('map').classList.remove('hidden');
         document.getElementById('prompt').classList.add("hidden");
-        for (var i = 0; i < markers.length; i++)
-            markers[i].setMap(null);
-        markers.length = 0;
 
-        var sumLat = 0, sumLon = 0, n = 0;
+        var newMarkers = [];
+
+        var count = 0;
+        var maxLat = -10000, minLat = 10000, maxLon = -10000, minLon = 10000;
 
         for (var loc in data)
             if (data.hasOwnProperty(loc)) {
@@ -316,10 +319,15 @@ $(document).ready(function () {
                 if (!occu)
                     occu = ' ';
 
-                if (recenter === true) {
-                    sumLat += lat;
-                    sumLon += lon;
-                    n++;
+                if (isFreshLoad === true) {
+                    if (lat > maxLat)
+                        maxLat = lat;
+                    if (lat < minLat)
+                        minLat = lat;
+                    if (lon > maxLon)
+                        maxLon = lon;
+                    if (lon < minLon)
+                        minLon = lon;
                 }
 
                 var marker = new google.maps.Marker({
@@ -334,15 +342,24 @@ $(document).ready(function () {
                     zIndex: zindexBus,
                     map: map
                 });
+                //remove old markers gradually to reduce visual lag
+                if (count < markers.length)
+                    markers[count].setMap(null);
+                count++;
                 zindexBus++;
-                markers.push(marker);
+                newMarkers.push(marker);
             }
+        if (count < markers.length)
+            for (var m = count; m < markers.length; m++)
+                markers[m].setMap(null);
+        markers = newMarkers;
 
-        if (recenter === true) {
-            var centerLat = sumLat / n;
-            var centerLon = sumLon / n;
-            var center = new google.maps.LatLng(centerLat, centerLon);
-            map.setCenter(center);
+        if (isFreshLoad === true) {
+            var bound = new google.maps.LatLngBounds(
+                new google.maps.LatLng(minLat, minLon),
+                new google.maps.LatLng(maxLat, maxLon),
+            );
+            map.fitBounds(bound, Math.max($(document).width(), $(document).height()) * 0.02);
         }
 
         if (navigator.geolocation) {
@@ -366,32 +383,32 @@ $(document).ready(function () {
         }
     }
 
-    function latRad(lat) {
-        var sin = Math.sin(lat * Math.PI / 180);
-        var radX2 = Math.log((1 + sin) / (1 - sin)) / 2;
-        return Math.max(Math.min(radX2, Math.PI), -Math.PI) / 2;
-    }
+    //function latRad(lat) {
+    //    var sin = Math.sin(lat * Math.PI / 180);
+    //    var radX2 = Math.log((1 + sin) / (1 - sin)) / 2;
+    //    return Math.max(Math.min(radX2, Math.PI), -Math.PI) / 2;
+    //}
 
-    function zoom(mapPx, worldPx, fraction) {
-        return Math.floor(Math.log(mapPx / worldPx / fraction) / Math.LN2);
-    }
+    //function zoom(mapPx, worldPx, fraction) {
+    //    return Math.floor(Math.log(mapPx / worldPx / fraction) / Math.LN2);
+    //}
 
-    function getBoundsZoomLevel(bounds, mapDim) {
-        var WORLD_DIM = { height: 256, width: 256 };
-        var ZOOM_MAX = 21;
+    //function getBoundsZoomLevel(bounds, mapDim) {
+    //    var WORLD_DIM = { height: 256, width: 256 };
+    //    var ZOOM_MAX = 21;
 
-        var ne = bounds.getNorthEast();
-        var sw = bounds.getSouthWest();
+    //    var ne = bounds.getNorthEast();
+    //    var sw = bounds.getSouthWest();
 
-        var latFraction = (latRad(ne.lat()) - latRad(sw.lat())) / Math.PI;
+    //    var latFraction = (latRad(ne.lat()) - latRad(sw.lat())) / Math.PI;
 
-        var lngDiff = ne.lng() - sw.lng();
-        var lngFraction = ((lngDiff < 0) ? (lngDiff + 360) : lngDiff) / 360;
+    //    var lngDiff = ne.lng() - sw.lng();
+    //    var lngFraction = ((lngDiff < 0) ? (lngDiff + 360) : lngDiff) / 360;
 
-        var latZoom = zoom(mapDim.height, WORLD_DIM.height, latFraction);
-        var lngZoom = zoom(mapDim.width, WORLD_DIM.width, lngFraction);
+    //    var latZoom = zoom(mapDim.height, WORLD_DIM.height, latFraction);
+    //    var lngZoom = zoom(mapDim.width, WORLD_DIM.width, lngFraction);
 
-        return Math.min(latZoom, lngZoom, ZOOM_MAX);
-    }
+    //    return Math.min(latZoom, lngZoom, ZOOM_MAX);
+    //}
 });
 
