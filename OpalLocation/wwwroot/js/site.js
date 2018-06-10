@@ -31,6 +31,7 @@ $(document).ready(function () {
     var availStops = new Set();
     var stopMarkers = [];
     var userMarker = null;
+    var currentRadio = null;
 
     setInterval(function () {
         tripStops = {};
