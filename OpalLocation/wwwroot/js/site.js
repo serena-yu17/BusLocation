@@ -14,6 +14,8 @@ function escapeHtml(string) {
     });
 }
 
+var radioToggle = null;
+
 $(document).ready(function () {
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(function (position) {
@@ -52,13 +54,7 @@ $(document).ready(function () {
             }
         options = {};
         getRoute();
-    }
-
-    document.getElementById('submit').onclick = function (event) {
-        event.preventDefault();
-        getLoc(true);
-        refreshLoc();
-    };
+    }   
 
     document.getElementById("route").onfocus = function () {
         document.getElementById("directionForm").classList.add("fade");
@@ -69,6 +65,11 @@ $(document).ready(function () {
         document.getElementById("directionForm").classList.remove("fade");
         document.getElementById("map").classList.remove("fade");
     };
+
+    radioToggle = function(caller) {
+        getLoc(true);
+        refreshLoc();
+    }
 
     function busIcon() {
         var size = Math.max($(document).width(), $(document).height()) * 0.015;
@@ -169,8 +170,6 @@ $(document).ready(function () {
             let data = {
                 tripIDs: tripStrArr.join(',')
             }
-            if (recenter === true)
-                document.getElementById('submit').disabled = true;
             $.ajax({
                 type: "GET",
                 url: locUrl,
@@ -181,9 +180,6 @@ $(document).ready(function () {
                 },
                 error: function (msg) {
                     console.log(msg);
-                },
-                complete: function () {
-                    document.getElementById('submit').disabled = false;
                 }
             });
         }
@@ -271,9 +267,9 @@ $(document).ready(function () {
                 let lbl = document.createElement('label');
                 lbl.classList.add("form-control");
                 let radID = "directionRadio" + count.toString();
-                let html = '<input type="radio" name="direction" id="' + radID + '"/> ' + escapeHtml(trip);
+                let html = '<input type="radio" name="direction" id="' + radID + '" onclick="radioToggle();"/> ' + escapeHtml(trip);
                 if (count === 0)
-                    html = '<input type="radio" name="direction" id="' + radID + '" checked/> ' + escapeHtml(trip);
+                    html = '<input type="radio" name="direction" id="' + radID + '" onclick="radioToggle();" checked/> ' + escapeHtml(trip);
                 lbl.innerHTML = html;
                 let id = "directionOption" + count.toString();
                 lbl.id = id;
@@ -286,6 +282,7 @@ $(document).ready(function () {
             }
         if (document.getElementById('directionRadio0'))
             document.getElementById('directionRadio0').focus();
+        radioToggle();
     }
 
     function renderMarkers(data, recenter) {

@@ -21,29 +21,26 @@
                 <button id="searchRoute" class="btn btn-outline-secondary" type="submit"><img src="~/images/lookup.svg" style="height:20px;" /></button>
             </div>
         </div>
-    </div>                                        
-</form>
-<form>
-    <div id="directionForm" class="hidden">
-        <div class="form-group">
-            <div class="input-group mb-3" id="directionOptions">
-                <div class="input-group-prepend">
-                    <span class="input-group-text input-text input-group-header">
-                        Direction
-                    </span>
-                </div>
-            </div>
-        </div>
-        <button class="btn btn-outline-primary input-group-header" type="submit" id="submit">Display</button>
     </div>
 </form>
+<div id="directionForm" class="hidden">
+    <div class="form-group">
+        <div class="input-group mb-3" id="directionOptions">
+            <div class="input-group-prepend">
+                <span class="input-group-text input-text input-group-header">
+                    Direction
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
 <br />
 <div id="map" class="hidden map-layout">
-</div> 
+</div>
 <div id="prompt" class="hidden"></div>
 <script>
-    function initMap() {}
-</script>       
+    function initMap() { }
+</script>
 <script src="https://maps.googleapis.com/maps/api/js?key=&callback=initMap"
         type="text/javascript"></script>
 <script>
