@@ -39,7 +39,7 @@ $(document).ready(function () {
         availStops.clear();
     }, 1000 * 3600 * 24);
 
-    document.getElementById('searchRoute').onclick = function () {
+    document.getElementById('searchRoute').onclick = function (event) {
         event.preventDefault();
         for (let op in options)
             if (options.hasOwnProperty(op)) {
@@ -51,7 +51,7 @@ $(document).ready(function () {
         getRoute();
     }
 
-    document.getElementById('submit').onclick = function () {
+    document.getElementById('submit').onclick = function (event) {
         event.preventDefault();
         getLoc(true);
         refreshLoc();
@@ -92,7 +92,7 @@ $(document).ready(function () {
     function stopIcon() {
         var size = Math.min($(document).width(), $(document).height()) * 0.015;
         return {
-            url: "/images/stop.svg",
+            url: "/images/dot-orange.svg",
             scaledSize: new google.maps.Size(size, size),
             origin: new google.maps.Point(0, 0),
             anchor: new google.maps.Point(size / 3, size / 3)
@@ -143,7 +143,7 @@ $(document).ready(function () {
         }
     }
 
-    function getLoc(recenter = false) {
+    function getLoc(recenter) {
         let tripArr = null;
         for (let op in options)
             if (options.hasOwnProperty(op)) {
@@ -166,7 +166,7 @@ $(document).ready(function () {
             let data = {
                 tripIDs: tripStrArr.join(',')
             }
-            if (recenter)
+            if (recenter === true)
                 document.getElementById('submit').disabled = true;
             $.ajax({
                 type: "GET",
@@ -285,7 +285,7 @@ $(document).ready(function () {
             document.getElementById('directionRadio0').focus();
     }
 
-    function renderMarkers(data, recenter = false) {
+    function renderMarkers(data, recenter) {
         if (!data)
             return;
         let isEmpty = true;
@@ -316,7 +316,7 @@ $(document).ready(function () {
                 if (!occu)
                     occu = ' ';
 
-                if (recenter) {
+                if (recenter === true) {
                     sumLat += lat;
                     sumLon += lon;
                     n++;
@@ -336,7 +336,7 @@ $(document).ready(function () {
                 markers.push(marker);
             }
 
-        if (recenter) {
+        if (recenter === true) {
             let centerLat = sumLat / n;
             let centerLon = sumLon / n;
             let center = new google.maps.LatLng(centerLat, centerLon);

@@ -21,7 +21,7 @@
                 <button id="searchRoute" class="btn btn-outline-secondary" type="submit"><img src="~/images/lookup.svg" style="height:20px;" /></button>
             </div>
         </div>
-    </div>
+    </div>                                        
 </form>
 <form>
     <div id="directionForm" class="hidden">
@@ -38,12 +38,11 @@
     </div>
 </form>
 <br />
-<div id="map" class="hidden" style="height:70vh; width:100%; min-height:400px; min-width:400px;">
+<div id="map" class="hidden map-layout">
 </div> 
 <div id="prompt" class="hidden"></div>
 <script>
-    function initMap() {
-    }
+    function initMap() {}
 </script>       
 <script src="https://maps.googleapis.com/maps/api/js?key=&callback=initMap"
         type="text/javascript"></script>
