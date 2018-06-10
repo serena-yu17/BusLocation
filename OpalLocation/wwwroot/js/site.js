@@ -1,4 +1,4 @@
-﻿const entityMap = {
+﻿var entityMap = {
     '&': '&amp;',
     '<': '&lt;',
     '>': '&gt;',
@@ -36,7 +36,7 @@ $(document).ready(function () {
     var currentRadio = null;
 
     var zindexBus = 10000;
-    const zindexSelf = 99999;
+    var zindexSelf = 99999;
 
     setInterval(function () {
         tripStops = {};
@@ -46,9 +46,9 @@ $(document).ready(function () {
 
     document.getElementById('searchRoute').onclick = function (event) {
         event.preventDefault();
-        for (let op in options)
+        for (var op in options)
             if (options.hasOwnProperty(op)) {
-                let elem = document.getElementById(op);
+                var elem = document.getElementById(op);
                 if (elem)
                     elem.parentElement.removeChild(elem);
             }
@@ -148,26 +148,26 @@ $(document).ready(function () {
     }
 
     function getLoc(recenter) {
-        let tripArr = null;
-        for (let op in options)
+        var tripArr = null;
+        for (var op in options)
             if (options.hasOwnProperty(op)) {
                 var radID = options[op].radID;
-                let elem = document.getElementById(radID);
+                var elem = document.getElementById(radID);
                 if (elem && elem.checked) {
                     tripArr = options[op].trips;
                     break;
                 }
             }
         if (tripArr !== null && tripArr.length !== 0) {
-            let tripStrArr = [];
-            let tripsToUpd = [];
-            for (let i = 0; i < tripArr.length; i++) {
+            var tripStrArr = [];
+            var tripsToUpd = [];
+            for (var i = 0; i < tripArr.length; i++) {
                 tripStrArr.push(tripArr[i].toString());
                 if (!tripStops.hasOwnProperty(tripArr[i]))
                     tripsToUpd.push(tripArr[i]);
             }
             getStops(tripsToUpd, tripArr);
-            let data = {
+            var data = {
                 tripIDs: tripStrArr.join(',')
             }
             $.ajax({
@@ -187,7 +187,7 @@ $(document).ready(function () {
 
     function getStops(tripIDToUpd, tripArr) {
         var tripsToUpdStr = [];
-        for (let i = 0; i < tripIDToUpd.length; i++) {
+        for (var i = 0; i < tripIDToUpd.length; i++) {
             tripsToUpdStr.push(tripIDToUpd[i].toString());
         }
         $.ajax({
@@ -199,14 +199,14 @@ $(document).ready(function () {
             success: function (data) {
                 if (!data || data.length === 0)
                     return;
-                for (let trip in data)
+                for (var trip in data)
                     if (data.hasOwnProperty(trip)) {
                         var coord = data[trip];
                         if (!tripStops.hasOwnProperty(trip))
                             tripStops[trip] = [];
                         if (!tripStopSigs.hasOwnProperty(trip))
                             tripStopSigs[trip] = new Set();
-                        for (let i = 0; i < coord.length; i++) {
+                        for (i = 0; i < coord.length; i++) {
                             var coordSig = coord[i].latitude.toString() + "&" + coord[i].longitude.toString();
                             if (!tripStopSigs[trip].has(coordSig)) {
                                 tripStops[trip].push(coord[i]);
@@ -223,19 +223,19 @@ $(document).ready(function () {
     }
 
     function renderStops(tripIDs) {
-        for (let i = 0; i < stopMarkers.length; i++)
+        for (var i = 0; i < stopMarkers.length; i++)
             stopMarkers[i].setMap(null);
         stopMarkers.length = 0;
         if (!tripIDs || tripIDs.length === 0)
             return;
-        let usedStops = new Set();
-        for (let i = 0; i < tripIDs.length; i++)
+        var usedStops = new Set();
+        for (i = 0; i < tripIDs.length; i++)
             if (tripStops.hasOwnProperty(tripIDs[i]) && tripStops[tripIDs[i]]) {
                 var stops = tripStops[tripIDs[i]];
-                for (let j = 0; j < stops.length; j++) {
-                    let key = stops[j].latitude.toString() + "&" + stops[j].longitude.toString();
+                for (var j = 0; j < stops.length; j++) {
+                    var key = stops[j].latitude.toString() + "&" + stops[j].longitude.toString();
                     if (!usedStops.has(key)) {
-                        let marker = new google.maps.Marker({
+                        var marker = new google.maps.Marker({
                             position: new google.maps.LatLng(stops[j].latitude, stops[j].longitude),
                             icon: stopIcon(),
                             map: map
@@ -250,8 +250,8 @@ $(document).ready(function () {
     function renderTrip(data) {
         if (!data)
             return;
-        let isEmpty = true;
-        for (let trip in data)
+        var isEmpty = true;
+        for (var trip in data)
             if (data.hasOwnProperty(trip)) {
                 isEmpty = false;
                 break;
@@ -261,17 +261,17 @@ $(document).ready(function () {
             return;
         }
         document.getElementById('directionForm').classList.remove('hidden');
-        let count = 0;
-        for (let trip in data)
+        var count = 0;
+        for (trip in data)
             if (data.hasOwnProperty(trip)) {
-                let lbl = document.createElement('label');
+                var lbl = document.createElement('label');
                 lbl.classList.add("form-control");
-                let radID = "directionRadio" + count.toString();
-                let html = '<input type="radio" name="direction" id="' + radID + '" onclick="radioToggle();"/> ' + escapeHtml(trip);
+                var radID = "directionRadio" + count.toString();
+                var html = '<input type="radio" name="direction" id="' + radID + '" onclick="radioToggle();"/> ' + escapeHtml(trip);
                 if (count === 0)
                     html = '<input type="radio" name="direction" id="' + radID + '" onclick="radioToggle();" checked/> ' + escapeHtml(trip);
                 lbl.innerHTML = html;
-                let id = "directionOption" + count.toString();
+                var id = "directionOption" + count.toString();
                 lbl.id = id;
                 document.getElementById('directionOptions').appendChild(lbl);
                 options[id] = {
@@ -288,8 +288,8 @@ $(document).ready(function () {
     function renderMarkers(data, recenter) {
         if (!data)
             return;
-        let isEmpty = true;
-        for (let trip in data)
+        var isEmpty = true;
+        for (var trip in data)
             if (data.hasOwnProperty(trip)) {
                 isEmpty = false;
                 break;
@@ -302,17 +302,17 @@ $(document).ready(function () {
         }
         document.getElementById('map').classList.remove('hidden');
         document.getElementById('prompt').classList.add("hidden");
-        for (let i = 0; i < markers.length; i++)
+        for (var i = 0; i < markers.length; i++)
             markers[i].setMap(null);
         markers.length = 0;
 
-        let sumLat = 0, sumLon = 0, n = 0;
+        var sumLat = 0, sumLon = 0, n = 0;
 
-        for (let loc in data)
+        for (var loc in data)
             if (data.hasOwnProperty(loc)) {
-                let lat = data[loc].coordinate.latitude;
-                let lon = data[loc].coordinate.longitude;
-                let occu = data[loc].occupancy;
+                var lat = data[loc].coordinate.latitude;
+                var lon = data[loc].coordinate.longitude;
+                var occu = data[loc].occupancy;
                 if (!occu)
                     occu = ' ';
 
@@ -322,7 +322,7 @@ $(document).ready(function () {
                     n++;
                 }
 
-                let marker = new google.maps.Marker({
+                var marker = new google.maps.Marker({
                     position: new google.maps.LatLng(lat, lon),
                     icon: busIcon(),
                     label: {
@@ -339,9 +339,9 @@ $(document).ready(function () {
             }
 
         if (recenter === true) {
-            let centerLat = sumLat / n;
-            let centerLon = sumLon / n;
-            let center = new google.maps.LatLng(centerLat, centerLon);
+            var centerLat = sumLat / n;
+            var centerLon = sumLon / n;
+            var center = new google.maps.LatLng(centerLat, centerLon);
             map.setCenter(center);
         }
 
