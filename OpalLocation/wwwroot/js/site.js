@@ -261,9 +261,12 @@ $(document).ready(function () {
             }
         if (isEmpty) {
             document.getElementById('directionForm').classList.add('hidden');
+            document.getElementById('prompt').classList.remove("hidden");
+            document.getElementById('prompt').innerHTML = 'No vehicles active were found.';
             return;
         }
         document.getElementById('directionForm').classList.remove('hidden');
+        document.getElementById('prompt').classList.add("hidden");
         var count = 0;
         for (trip in data)
             if (data.hasOwnProperty(trip)) {
