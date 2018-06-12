@@ -12,6 +12,8 @@
     width: 100%;
     min-height: 400px;
     min-width: 400px;
+    max-width: none;
+    max-height:none;
 }
 
 .main-body {

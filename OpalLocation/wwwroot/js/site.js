@@ -14,7 +14,16 @@ function escapeHtml(string) {
     });
 }
 
-var map = new google.maps.Map(document.getElementById('map'), { zoom: 13 });
+var map = new google.maps.Map(document.getElementById('map'), {
+    zoom: 13,
+    panControl: true,
+    zoomControl: true,
+    mapTypeControl: true,
+    scaleControl: true,
+    streetViewControl: true,
+    overviewMapControl: true,
+    rotateControl: true
+});
 
 var radioToggle = null;
 
@@ -27,7 +36,7 @@ $(document).ready(function () {
     }
 
     var options = {};
-    var markers = [];
+    var vehicleMarkers = [];
     var refreshInterval = null;
     var timeOut = null;
     var tripStops = {};
@@ -36,6 +45,13 @@ $(document).ready(function () {
     var stopMarkers = [];
     var userMarker = null;
     var currentRadio = null;
+    var trafficLayer = null;
+
+    var iconSizes = [
+        [16, 1.8],
+        [15, 1.5],
+        [14, 1.2]
+    ];
 
     var zindexBus = 10000;
     var zindexSelf = 99999;
@@ -61,20 +77,63 @@ $(document).ready(function () {
     document.getElementById("route").onfocus = function () {
         document.getElementById("directionForm").classList.add("fade");
         document.getElementById("map").classList.add("fade");
+        document.getElementById('btn-traffic').classList.add("fade");
     };
 
     document.getElementById("route").onblur = function () {
         document.getElementById("directionForm").classList.remove("fade");
         document.getElementById("map").classList.remove("fade");
+        document.getElementById('btn-traffic').classList.remove("fade");
     };
+
+    document.getElementById('btn-traffic').onclick = function () {
+        if (trafficLayer === null) {
+            trafficLayer = new google.maps.TrafficLayer();
+            trafficLayer.setMap(map);
+            this.classList.remove('btn-outline-success');
+            this.classList.add('btn-success');
+        }
+        else {
+            trafficLayer.setMap(null);
+            trafficLayer = null;
+            this.classList.add('btn-outline-success');
+            this.classList.remove('btn-success');
+        }
+    };
+
+    google.maps.event.addListener(map, 'zoom_changed', function () {
+        resizeIcons(getIconSize());
+    });
 
     radioToggle = function (caller) {
         getLoc(true);
         refreshLoc();
     }
 
-    function busIcon() {
+    function getIconSize() {
+        var zoom = map.getZoom();
+        for (var i = 0; i < iconSizes.length; i++) {
+            if (zoom >= iconSizes[i][0])
+                return iconSizes[i][1];
+        }
+        return 1;
+    }
+
+    function resizeIcons(factor) {
+        if (vehicleMarkers)
+            for (var i = 0; i < vehicleMarkers.length; i++)
+                vehicleMarkers[i].setIcon(busIcon(factor));
+        if (stopMarkers)
+            for (i = 0; i < stopMarkers.length; i++)
+                stopMarkers[i].setIcon(stopIcon(factor));
+        if (userMarker)
+            userMarker.setIcon(userIcon(factor));
+    }
+
+    function busIcon(factor) {
         var size = Math.max($(document).width(), $(document).height()) * 0.015;
+        if (factor !== undefined)
+            size *= factor;
         return {
             url: "/images/Bus.svg",
             scaledSize: new google.maps.Size(size, size),
@@ -84,8 +143,10 @@ $(document).ready(function () {
         };
     }
 
-    function userIcon() {
+    function userIcon(factor) {
         var size = Math.max($(document).width(), $(document).height()) * 0.015;
+        if (factor !== undefined)
+            size *= factor;
         return {
             url: "/images/crosshair.svg",
             scaledSize: new google.maps.Size(size, size),
@@ -95,8 +156,10 @@ $(document).ready(function () {
         };
     }
 
-    function stopIcon() {
+    function stopIcon(factor) {
         var size = Math.max($(document).width(), $(document).height()) * 0.006;
+        if (factor !== undefined)
+            size *= factor;
         return {
             url: "/images/dot-orange.svg",
             scaledSize: new google.maps.Size(size, size),
@@ -128,7 +191,8 @@ $(document).ready(function () {
         var route = routeElem.value.trim();
         if (route != '') {
             document.getElementById('searchRoute').disabled = true;
-            document.getElementById('map').classList.add('hidden');
+            document.getElementById('map').classList.add("hidden");
+            document.getElementById('btn-traffic').classList.add("hidden");
             $.ajax({
                 type: "GET",
                 url: tripUrl,
@@ -240,7 +304,7 @@ $(document).ready(function () {
                     if (!usedStops.has(key)) {
                         var marker = new google.maps.Marker({
                             position: new google.maps.LatLng(stops[j].latitude, stops[j].longitude),
-                            icon: stopIcon(),
+                            icon: stopIcon(getIconSize()),
                             map: map
                         });
                         stopMarkers.push(marker);
@@ -304,9 +368,11 @@ $(document).ready(function () {
             document.getElementById('prompt').classList.remove("hidden");
             document.getElementById('prompt').innerHTML = 'No vehicles active were found.';
             document.getElementById('map').classList.add('hidden');
+            document.getElementById('btn-traffic').classList.add('hidden');
             return;
         }
         document.getElementById('map').classList.remove('hidden');
+        document.getElementById('btn-traffic').classList.remove('hidden')
         document.getElementById('prompt').classList.add("hidden");
 
         var newMarkers = [];
@@ -335,7 +401,7 @@ $(document).ready(function () {
 
                 var marker = new google.maps.Marker({
                     position: new google.maps.LatLng(lat, lon),
-                    icon: busIcon(),
+                    icon: busIcon(getIconSize()),
                     label: {
                         text: occu,
                         color: "#BE1616",
@@ -346,16 +412,16 @@ $(document).ready(function () {
                     map: map
                 });
                 //remove old markers gradually to reduce visual lag
-                if (count < markers.length)
-                    markers[count].setMap(null);
+                if (count < vehicleMarkers.length)
+                    vehicleMarkers[count].setMap(null);
                 count++;
                 zindexBus++;
                 newMarkers.push(marker);
             }
-        if (count < markers.length)
-            for (var m = count; m < markers.length; m++)
-                markers[m].setMap(null);
-        markers = newMarkers;
+        if (count < vehicleMarkers.length)
+            for (var m = count; m < vehicleMarkers.length; m++)
+                vehicleMarkers[m].setMap(null);
+        vehicleMarkers = newMarkers;
 
         if (isFreshLoad === true) {
             var bound = new google.maps.LatLngBounds(
@@ -372,7 +438,7 @@ $(document).ready(function () {
                     userMarker.setMap(null);
                 userMarker = new google.maps.Marker({
                     position: userLoc,
-                    icon: userIcon(),
+                    icon: userIcon(getIconSize()),
                     label: {
                         text: 'I am here',
                         color: '#2916BE',
@@ -385,33 +451,5 @@ $(document).ready(function () {
             });
         }
     }
-
-    //function latRad(lat) {
-    //    var sin = Math.sin(lat * Math.PI / 180);
-    //    var radX2 = Math.log((1 + sin) / (1 - sin)) / 2;
-    //    return Math.max(Math.min(radX2, Math.PI), -Math.PI) / 2;
-    //}
-
-    //function zoom(mapPx, worldPx, fraction) {
-    //    return Math.floor(Math.log(mapPx / worldPx / fraction) / Math.LN2);
-    //}
-
-    //function getBoundsZoomLevel(bounds, mapDim) {
-    //    var WORLD_DIM = { height: 256, width: 256 };
-    //    var ZOOM_MAX = 21;
-
-    //    var ne = bounds.getNorthEast();
-    //    var sw = bounds.getSouthWest();
-
-    //    var latFraction = (latRad(ne.lat()) - latRad(sw.lat())) / Math.PI;
-
-    //    var lngDiff = ne.lng() - sw.lng();
-    //    var lngFraction = ((lngDiff < 0) ? (lngDiff + 360) : lngDiff) / 360;
-
-    //    var latZoom = zoom(mapDim.height, WORLD_DIM.height, latFraction);
-    //    var lngZoom = zoom(mapDim.width, WORLD_DIM.width, lngFraction);
-
-    //    return Math.min(latZoom, lngZoom, ZOOM_MAX);
-    //}
 });
 
