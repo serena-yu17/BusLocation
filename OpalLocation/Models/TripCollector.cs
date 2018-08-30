@@ -181,18 +181,26 @@ namespace OpalLocation.Models
 
         static async Task getLocation()
         {
+            var loadingLocations = new Dictionary<ulong, List<TripLoc>>();
             await Task.WhenAll(new Task[]{
-                 getLocation(bus),
-                 getLocation(train)
+                 getLocation(bus, loadingLocations),
+                 getLocation(train, loadingLocations)
             });
+            Interlocked.Exchange(ref locations, loadingLocations);
         }
 
         static async Task getTripInfo()
         {
+            var loadingStopLocations = new Dictionary<uint, Coordinate>();
+            var loadingTrips = new Dictionary<string, List<TripInfo>>();
+            var loadingTripStops = new Dictionary<ulong, uint[]>();
             await Task.WhenAll(new Task[]{
-                 getTripInfo(bus),
-                 getTripInfo(train)
+                 getTripInfo(bus,loadingStopLocations, loadingTrips, loadingTripStops),
+                 getTripInfo(train, loadingStopLocations, loadingTrips, loadingTripStops)
             });
+            Interlocked.Exchange(ref stopLocations, loadingStopLocations);
+            Interlocked.Exchange(ref trips, loadingTrips);
+            Interlocked.Exchange(ref tripStops, loadingTripStops);
         }
 
         static string stripID(string tripID)
@@ -207,7 +215,7 @@ namespace OpalLocation.Models
             return sb.ToString();
         }
 
-        static async Task getLocation(string type)
+        static async Task getLocation(string type, Dictionary<ulong, List<TripLoc>> loadingLocations)
         {
             Dictionary<ulong, List<TripLoc>> newLoc = new Dictionary<ulong, List<TripLoc>>();
             using (HttpClient client = new HttpClient())
@@ -256,12 +264,16 @@ namespace OpalLocation.Models
                     }
                 }
             }
-            lock (locations)
+            lock (loadingLocations)
                 foreach (var kp in newLoc)
-                    locations[kp.Key] = kp.Value;
+                    loadingLocations[kp.Key] = kp.Value;
         }
 
-        static async Task getTripInfo(string type)
+        static async Task getTripInfo(string type,
+            Dictionary<uint, Coordinate> loadingStopLocations,
+            Dictionary<string, List<TripInfo>> loadingTrips,
+            Dictionary<ulong, uint[]> loadingTripStops
+            )
         {
             using (HttpClient client = new HttpClient())
             {
@@ -393,7 +405,7 @@ namespace OpalLocation.Models
                                                         if (type == train)
                                                         {
                                                             desc = new string(content.ToArray()).Trim();
-                                                            if (!string.IsNullOrEmpty(route) && 
+                                                            if (!string.IsNullOrEmpty(route) &&
                                                                 !string.IsNullOrEmpty(desc) && tripID != 0 &&
                                                                 desc != "Empty Train")
                                                             {
@@ -429,9 +441,9 @@ namespace OpalLocation.Models
                                     }
                                 }
                             }
-                            lock (trips)
+                            lock (loadingTrips)
                                 foreach (var kp in newTrips)
-                                    trips[kp.Key] = kp.Value;
+                                    loadingTrips[kp.Key] = kp.Value;
                             routeID.Clear();
                         }
                         else if (entry.Name.StartsWith("stop_times"))
@@ -499,9 +511,9 @@ namespace OpalLocation.Models
                                     }
                                 }
                             }
-                            lock (tripStops)
+                            lock (loadingTripStops)
                                 foreach (var kp in tempStops)
-                                    tripStops[kp.Key] = kp.Value.ToArray();
+                                    loadingTripStops[kp.Key] = kp.Value.ToArray();
                         }
                         else if (entry.Name.StartsWith("stops"))
                         {
@@ -592,9 +604,9 @@ namespace OpalLocation.Models
                                     }
                                 }
                             }
-                            lock (stopLocations)
+                            lock (loadingStopLocations)
                                 foreach (var kp in newStopLocations)
-                                    stopLocations[kp.Key] = kp.Value;
+                                    loadingStopLocations[kp.Key] = kp.Value;
                         }
                     }
                 }
