@@ -72,7 +72,7 @@ $(document).ready(function () {
             }
         options = {};
         getRoute();
-    }
+    };
 
     document.getElementById("route").onfocus = function () {
         document.getElementById("directionForm").classList.add("fade");
