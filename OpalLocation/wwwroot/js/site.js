@@ -44,8 +44,7 @@ $(document).ready(function () {
     var availStops = new Set();
     var stopMarkers = [];
     var userMarker = null;
-    var currentRadio = null;
-    var trafficLayer = null;
+    var trafficLayer = null;     
 
     var iconSizes = [
         [16, 1.8],
@@ -54,8 +53,32 @@ $(document).ready(function () {
     ];
 
     var zindexBus = 10000;
-    var zindexSelf = 99999;
+    var zindexSelf = 99999;       
 
+    function refreshLoc() {
+        //update location every 15s
+        if (!refreshInterval) {
+            refreshInterval = setInterval(function () {
+                if (!document.getElementById('map').classList.contains('hidden'))
+                    getLoc();
+            }, 15000);
+        }
+        //if no user action, stop updating after 10 min.
+        if (timeOut)
+            clearTimeout(timeOut);
+        timeOut = setTimeout(function () {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
+        }, 600 * 1000);
+    }
+
+    refreshLoc();
+    //If any user action, resume updating
+    $(document.body).bind('mousemove keydown click', refreshLoc);
+
+    //refresh stop data every day
     setInterval(function () {
         tripStops = {};
         tripStopSigs = {};
@@ -107,8 +130,7 @@ $(document).ready(function () {
 
     radioToggle = function (caller) {
         getLoc(true);
-        refreshLoc();
-    }
+    };
 
     function getIconSize() {
         var zoom = map.getZoom();
@@ -168,28 +190,10 @@ $(document).ready(function () {
         };
     }
 
-    function refreshLoc() {
-        refreshInterval = setInterval(function () {
-            if (document.getElementById('map').classList.contains('hidden')) {
-                if (refreshInterval)
-                    clearInterval(refreshInterval);
-                return;
-            }
-            else
-                getLoc();
-        }, 15000);
-        if (timeOut)
-            clearTimeout(timeOut);
-        timeOut = setTimeout(function () {
-            if (refreshInterval)
-                clearInterval(refreshInterval);
-        }, 600 * 1000);
-    }
-
     function getRoute() {
         var routeElem = document.getElementById('route');
         var route = routeElem.value.trim();
-        if (route != '') {
+        if (route !== '') {
             document.getElementById('searchRoute').disabled = true;
             document.getElementById('map').classList.add("hidden");
             document.getElementById('btn-traffic').classList.add("hidden");
@@ -236,7 +240,7 @@ $(document).ready(function () {
                 getStops(tripsToUpd, tripArr);
             var data = {
                 tripIDs: tripStrArr.join(',')
-            }
+            };
             $.ajax({
                 type: "GET",
                 url: locUrl,
