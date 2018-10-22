@@ -95,7 +95,7 @@ namespace OpalLocation.Models
                 loadLoc();
 
             tripTimer.Elapsed += new System.Timers.ElapsedEventHandler((s, e) => loadTrip());
-            tripTimer.Interval = 1000 * 3600 * 24;  //1 day
+            tripTimer.Interval = 1000 * 3600;  //1 hour
             tripTimer.AutoReset = true;
             tripTimer.Start();
             locTimer.Elapsed += new System.Timers.ElapsedEventHandler((s, e) => loadLoc());
