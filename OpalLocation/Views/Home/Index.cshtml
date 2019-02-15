@@ -6,7 +6,7 @@
     Realtime location for Sydney buses and trains
 </h1>
 <br />
-<form>
+<form action="@Url.Action("Index")" method="get" id="main-form">
     <div class="form-group">
         <div class="input-group mb-3">
             <div class="input-group-prepend">
@@ -14,17 +14,17 @@
                     Route ID
                 </span>
             </div>
-            <input class="form-control" id="route" type="text" placeholder="Input your bus/train route ID e.g. 400, T2" />
+            <input class="form-control" id="route" name="route" type="text" placeholder="Input your bus/train route ID e.g. 400, T2" required />
             <div class="input-group-addon">
-                <button id="searchRoute" class="btn btn-outline-secondary" type="submit"><img src="~/images/lookup.svg" style="height:20px;" /></button>
+                <button class="btn btn-outline-secondary" type="submit"><img src="~/images/lookup.svg" style="height:20px;" /></button>
             </div>
         </div>
     </div>
-    <div id="directionForm" class="hidden">
-        <label for="directionOptions" class="form-headers">Directions:</label>
-        <div class="form-group" id="directionOptions"></div>
-    </div>
 </form>
+<div id="directionForm" class="hidden">
+    <label for="directionOptions" class="form-headers">Directions:</label>
+    <div class="form-group" id="directionOptions"></div>
+</div>
 <div id="prompt" class="hidden form-headers"></div>
 <div id="map" class="hidden map-layout">
 </div>
@@ -37,6 +37,6 @@
 <script>
     const tripUrl = '@Url.Action("Route")';
     const locUrl = '@Url.Action("Location")';
-    const stopUrl = '@Url.Action("Stop")';    
+    const stopUrl = '@Url.Action("Stop")';
 </script>
-<script src="~/js/site.min.js"></script>
+<script src="~/js/site.js"></script>

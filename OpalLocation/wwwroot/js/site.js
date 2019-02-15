@@ -1,39 +1,14 @@
-﻿var entityMap = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;',
-    '/': '&#x2F;',
-    '`': '&#x60;',
-    '=': '&#x3D;'
-};
-function escapeHtml(string) {
-    return String(string).replace(/[&<>"'`=\/]/g, function (s) {
-        return entityMap[s];
-    });
-}
-
-var map = new google.maps.Map(document.getElementById('map'), {
-    zoom: 13,
-    panControl: true,
-    zoomControl: true,
-    mapTypeControl: true,
-    scaleControl: true,
-    streetViewControl: true,
-    overviewMapControl: true,
-    rotateControl: true
-});
-
-var radioToggle = null;
-
-$(document).ready(function () {
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(function (position) {
-            initialLocation = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
-            map.setCenter(initialLocation);
-        });
-    }
+﻿(function () {
+    var entityMap = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+        '/': '&#x2F;',
+        '`': '&#x60;',
+        '=': '&#x3D;'
+    };
 
     var options = {};
     var vehicleMarkers = [];
@@ -44,7 +19,8 @@ $(document).ready(function () {
     var availStops = new Set();
     var stopMarkers = [];
     var userMarker = null;
-    var trafficLayer = null;     
+    var trafficLayer = null;
+    var currentRoute = "";
 
     var iconSizes = [
         [16, 1.8],
@@ -53,7 +29,28 @@ $(document).ready(function () {
     ];
 
     var zindexBus = 10000;
-    var zindexSelf = 99999;       
+    var zindexSelf = 99999;
+
+    var map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 13,
+        panControl: true,
+        zoomControl: true,
+        mapTypeControl: true,
+        scaleControl: true,
+        streetViewControl: true,
+        overviewMapControl: true,
+        rotateControl: true
+    });
+
+    function escapeHtml(string) {
+        return String(string).replace(/[&<>"'`=\/]/g, function (s) {
+            return entityMap[s];
+        });
+    }
+
+    function radioToggle() {
+        getLoc(true);
+    }
 
     function refreshLoc() {
         //update location every 15s
@@ -73,64 +70,6 @@ $(document).ready(function () {
             }
         }, 600 * 1000);
     }
-
-    refreshLoc();
-    //If any user action, resume updating
-    $(document.body).bind('mousemove keydown click', refreshLoc);
-
-    //refresh stop data every day
-    setInterval(function () {
-        tripStops = {};
-        tripStopSigs = {};
-        availStops.clear();
-    }, 1000 * 3600 * 24);
-
-    document.getElementById('searchRoute').onclick = function (event) {
-        event.preventDefault();
-        for (var op in options)
-            if (options.hasOwnProperty(op)) {
-                var elem = document.getElementById(op);
-                if (elem)
-                    elem.parentElement.removeChild(elem);
-            }
-        options = {};
-        getRoute();
-    };
-
-    document.getElementById("route").onfocus = function () {
-        document.getElementById("directionForm").classList.add("fade");
-        document.getElementById("map").classList.add("fade");
-        document.getElementById('btn-traffic').classList.add("fade");
-    };
-
-    document.getElementById("route").onblur = function () {
-        document.getElementById("directionForm").classList.remove("fade");
-        document.getElementById("map").classList.remove("fade");
-        document.getElementById('btn-traffic').classList.remove("fade");
-    };
-
-    document.getElementById('btn-traffic').onclick = function () {
-        if (trafficLayer === null) {
-            trafficLayer = new google.maps.TrafficLayer();
-            trafficLayer.setMap(map);
-            this.classList.remove('btn-outline-success');
-            this.classList.add('btn-success');
-        }
-        else {
-            trafficLayer.setMap(null);
-            trafficLayer = null;
-            this.classList.add('btn-outline-success');
-            this.classList.remove('btn-success');
-        }
-    };
-
-    google.maps.event.addListener(map, 'zoom_changed', function () {
-        resizeIcons(getIconSize());
-    });
-
-    radioToggle = function (caller) {
-        getLoc(true);
-    };
 
     function getIconSize() {
         var zoom = map.getZoom();
@@ -194,7 +133,6 @@ $(document).ready(function () {
         var routeElem = document.getElementById('route');
         var route = routeElem.value.trim();
         if (route !== '') {
-            document.getElementById('searchRoute').disabled = true;
             document.getElementById('map').classList.add("hidden");
             document.getElementById('btn-traffic').classList.add("hidden");
             $.ajax({
@@ -208,10 +146,6 @@ $(document).ready(function () {
                 },
                 error: function (msg) {
                     console.log(msg);
-                },
-                complete: function () {
-                    document.getElementById('searchRoute').disabled = false;
-                    waitingUpd = false;
                 }
             });
         }
@@ -341,9 +275,9 @@ $(document).ready(function () {
                 var lbl = document.createElement('label');
                 lbl.classList.add("form-control");
                 var radID = "directionRadio" + count.toString();
-                var html = '<input type="radio" name="direction" id="' + radID + '" onclick="radioToggle();"/> ' + escapeHtml(trip);
+                var html = '<input type="radio" class="directionRadio" name="direction" id="' + radID + '"/> ' + escapeHtml(trip);
                 if (count === 0)
-                    html = '<input type="radio" name="direction" id="' + radID + '" onclick="radioToggle();" checked/> ' + escapeHtml(trip);
+                    html = '<input type="radio" class="directionRadio" name="direction" id="' + radID + '" checked/> ' + escapeHtml(trip);
                 lbl.innerHTML = html;
                 var id = "directionOption" + count.toString();
                 lbl.id = id;
@@ -455,5 +389,74 @@ $(document).ready(function () {
             });
         }
     }
-});
 
+    $("#main-form").submit(function (event) {
+        var newRoute = document.getElementById("route").value.trim();
+        if (newRoute === "" || newRoute === currentRoute)
+            event.preventDefault();
+        else
+            return true;
+    });
+
+    google.maps.event.addListener(map, 'zoom_changed', function () {
+        resizeIcons(getIconSize());
+    });
+
+    $("#directionOptions").on('change', '.directionRadio',function () {
+        radioToggle();
+    });
+
+    //If any user action, resume updating
+    $(document.body).bind('mousemove keydown click', refreshLoc);
+
+    document.getElementById("route").onfocus = function () {
+        document.getElementById("directionForm").classList.add("fade");
+        document.getElementById("map").classList.add("fade");
+        document.getElementById('btn-traffic').classList.add("fade");
+    };
+
+    document.getElementById("route").onblur = function () {
+        document.getElementById("directionForm").classList.remove("fade");
+        document.getElementById("map").classList.remove("fade");
+        document.getElementById('btn-traffic').classList.remove("fade");
+    };
+
+    document.getElementById('btn-traffic').onclick = function () {
+        if (trafficLayer === null) {
+            trafficLayer = new google.maps.TrafficLayer();
+            trafficLayer.setMap(map);
+            this.classList.remove('btn-outline-success');
+            this.classList.add('btn-success');
+        }
+        else {
+            trafficLayer.setMap(null);
+            trafficLayer = null;
+            this.classList.add('btn-outline-success');
+            this.classList.remove('btn-success');
+        }
+    };
+
+    //Initializes page
+    var urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('route')) {
+        var route = urlParams.get('route');
+        document.getElementById("route").value = route;
+        currentRoute = route;
+        document.title = "Bus Location: " + route;
+        getRoute();
+        refreshLoc();
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(function (position) {
+                initialLocation = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
+                map.setCenter(initialLocation);
+            });
+        }
+        //refresh stop data every day
+        setInterval(function () {
+            tripStops = {};
+            tripStopSigs = {};
+            availStops.clear();
+        }, 1000 * 3600 * 24);
+    } 
+})();
