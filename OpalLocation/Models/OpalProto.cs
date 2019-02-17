@@ -1,4 +1,5 @@
 ﻿using ProtoBuf;
+using System.ComponentModel;
 
 namespace OpalLocation.Models
 {
@@ -148,9 +149,10 @@ namespace OpalLocation.Models
     public class FeedHeader
     {
         public string gtfs_realtime_version;
-        public Incrementality incrementality = Incrementality.DIFFERENTIAL;
+        [DefaultValue(Incrementality.DIFFERENTIAL)]
+        public Incrementality incrementality;
         public ulong timestamp;
-        public byte[] extension = null;
+        public byte[] extension;
     }
 
     [ProtoContract(ImplicitFields = ImplicitFields.AllFields)]
@@ -160,7 +162,7 @@ namespace OpalLocation.Models
     public class FeedEntity
     {
         public string id;
-        public bool is_deleted = false;
+        public bool is_deleted;
         public TripUpdate trip_update;
         public VehiclePosition vehicle;
         public Alert alert;
@@ -174,8 +176,8 @@ namespace OpalLocation.Models
     {
         public TripDescriptor trip;
         public StopTimeUpdate[] stop_time_update;
-        public VehicleDescriptor vehicle;        
-        public ulong timestamp = 0;
+        public VehicleDescriptor vehicle;
+        public ulong timestamp;
         public byte[] extensions;
     }
 
@@ -192,12 +194,13 @@ namespace OpalLocation.Models
     [ProtoInclude(100, typeof(StopTimeEvent))]
     [ProtoInclude(101, typeof(ScheduleRelationship))]
     public class StopTimeUpdate
-    {        
-        public uint stop_sequence = 0;
+    {
+        public uint stop_sequence;
         public StopTimeEvent arrival;
         public StopTimeEvent departure;
-        public string stop_id;        
-        public ScheduleRelationship schedule_relationship = ScheduleRelationship.SCHEDULED;
+        public string stop_id;
+        [DefaultValue(ScheduleRelationship.SCHEDULED)]
+        public ScheduleRelationship schedule_relationship;
         public byte[] extension;
     }
 
@@ -210,10 +213,11 @@ namespace OpalLocation.Models
     [ProtoInclude(105, typeof(OccupancyStatus))]
     public class VehiclePosition
     {
-        public TripDescriptor trip;        
+        public TripDescriptor trip;
         public Position position;
-        public uint current_stop_sequence = 0;        
-        public VehicleStopStatus current_status = VehicleStopStatus.IN_TRANSIT_TO;
+        public uint current_stop_sequence;
+        [DefaultValue(VehicleStopStatus.IN_TRANSIT_TO)]
+        public VehicleStopStatus current_status;
         public ulong timestamp;
         public CongestionLevel congestion_level;
         public string stop_id;
@@ -235,9 +239,11 @@ namespace OpalLocation.Models
         [ProtoMember(5)]
         public EntitySelector[] informed_entity;
         [ProtoMember(6)]
-        public Cause cause = Cause.UNKNOWN_CAUSE;
+        [DefaultValue(Cause.UNKNOWN_CAUSE)]
+        public Cause cause;
         [ProtoMember(7)]
-        public Effect effect = Effect.UNKNOWN_EFFECT;
+        [DefaultValue(Effect.UNKNOWN_EFFECT)]
+        public Effect effect;
         [ProtoMember(8)]
         public TranslatedString url;
         [ProtoMember(10)]
@@ -270,7 +276,7 @@ namespace OpalLocation.Models
     [ProtoInclude(100, typeof(ScheduleTripRelationship))]
     public class TripDescriptor
     {
-        public string trip_id;        
+        public string trip_id;
         public string start_time;
         public string start_date;
         public ScheduleTripRelationship schedule_relationship;
