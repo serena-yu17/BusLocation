@@ -1,10 +1,4 @@
 ﻿using ProtoBuf;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
-using System.Runtime.Serialization;
-using System.Threading.Tasks;
 
 namespace OpalLocation.Models
 {
@@ -142,7 +136,7 @@ namespace OpalLocation.Models
 
     [ProtoContract(ImplicitFields = ImplicitFields.AllPublic)]
     [ProtoInclude(100, typeof(FeedHeader))]
-    [ProtoInclude(100, typeof(FeedEntity))]
+    [ProtoInclude(101, typeof(FeedEntity))]
     public class FeedMessage
     {
         public FeedHeader header;
@@ -160,6 +154,9 @@ namespace OpalLocation.Models
     }
 
     [ProtoContract(ImplicitFields = ImplicitFields.AllFields)]
+    [ProtoInclude(100, typeof(TripUpdate))]
+    [ProtoInclude(101, typeof(VehiclePosition))]
+    [ProtoInclude(102, typeof(Alert))]
     public class FeedEntity
     {
         public string id;
@@ -170,11 +167,14 @@ namespace OpalLocation.Models
     }
 
     [ProtoContract(ImplicitFields = ImplicitFields.AllFields)]
+    [ProtoInclude(100, typeof(TripDescriptor))]
+    [ProtoInclude(101, typeof(StopTimeUpdate))]
+    [ProtoInclude(102, typeof(VehicleDescriptor))]
     public class TripUpdate
     {
         public TripDescriptor trip;
-        public VehicleDescriptor vehicle;
         public StopTimeUpdate[] stop_time_update;
+        public VehicleDescriptor vehicle;        
         public ulong timestamp = 0;
         public byte[] extensions;
     }
@@ -189,41 +189,62 @@ namespace OpalLocation.Models
     }
 
     [ProtoContract(ImplicitFields = ImplicitFields.AllFields)]
+    [ProtoInclude(100, typeof(StopTimeEvent))]
+    [ProtoInclude(101, typeof(ScheduleRelationship))]
     public class StopTimeUpdate
-    {
+    {        
         public uint stop_sequence = 0;
-        public string stop_id;
         public StopTimeEvent arrival;
         public StopTimeEvent departure;
+        public string stop_id;        
         public ScheduleRelationship schedule_relationship = ScheduleRelationship.SCHEDULED;
         public byte[] extension;
     }
 
     [ProtoContract(ImplicitFields = ImplicitFields.AllFields)]
+    [ProtoInclude(100, typeof(TripDescriptor))]
+    [ProtoInclude(101, typeof(Position))]
+    [ProtoInclude(102, typeof(VehicleStopStatus))]
+    [ProtoInclude(103, typeof(CongestionLevel))]
+    [ProtoInclude(104, typeof(VehicleDescriptor))]
+    [ProtoInclude(105, typeof(OccupancyStatus))]
     public class VehiclePosition
     {
-        public TripDescriptor trip;
-        public VehicleDescriptor vehicle;
+        public TripDescriptor trip;        
         public Position position;
-        public uint current_stop_sequence = 0;
-        public string stop_id;
+        public uint current_stop_sequence = 0;        
         public VehicleStopStatus current_status = VehicleStopStatus.IN_TRANSIT_TO;
         public ulong timestamp;
         public CongestionLevel congestion_level;
+        public string stop_id;
+        public VehicleDescriptor vehicle;
         public OccupancyStatus occupancy_status;
         public byte[] extension;
     }
 
-    [ProtoContract(ImplicitFields = ImplicitFields.AllFields)]
+    [ProtoContract]
+    [ProtoInclude(100, typeof(TimeRange))]
+    [ProtoInclude(101, typeof(EntitySelector))]
+    [ProtoInclude(102, typeof(Cause))]
+    [ProtoInclude(103, typeof(Effect))]
+    [ProtoInclude(104, typeof(TranslatedString))]
     public class Alert
     {
+        [ProtoMember(1)]
         public TimeRange[] active_period;
+        [ProtoMember(5)]
         public EntitySelector[] informed_entity;
+        [ProtoMember(6)]
         public Cause cause = Cause.UNKNOWN_CAUSE;
+        [ProtoMember(7)]
         public Effect effect = Effect.UNKNOWN_EFFECT;
+        [ProtoMember(8)]
         public TranslatedString url;
+        [ProtoMember(10)]
         public TranslatedString header_text;
+        [ProtoMember(11)]
         public TranslatedString description_text;
+        [ProtoMember(1000)]
         public byte[] extension;
     }
 
@@ -246,13 +267,14 @@ namespace OpalLocation.Models
     }
 
     [ProtoContract(ImplicitFields = ImplicitFields.AllFields)]
+    [ProtoInclude(100, typeof(ScheduleTripRelationship))]
     public class TripDescriptor
     {
-        public string trip_id;
-        public string route_id;
+        public string trip_id;        
         public string start_time;
         public string start_date;
         public ScheduleTripRelationship schedule_relationship;
+        public string route_id;
         public byte[] extension;
     }
 
@@ -266,6 +288,7 @@ namespace OpalLocation.Models
     }
 
     [ProtoContract(ImplicitFields = ImplicitFields.AllFields)]
+    [ProtoInclude(100, typeof(TripDescriptor))]
     public class EntitySelector
     {
         public string agency_id;
@@ -277,9 +300,10 @@ namespace OpalLocation.Models
     }
 
     [ProtoContract(ImplicitFields = ImplicitFields.AllFields)]
+    [ProtoInclude(100, typeof(Translation))]
     public class TranslatedString
     {
-        Translation[] translation;
+        public Translation[] translation;
     }
 
     [ProtoContract(ImplicitFields = ImplicitFields.AllFields)]
