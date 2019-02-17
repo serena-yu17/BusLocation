@@ -4,6 +4,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -220,7 +221,8 @@ namespace OpalLocation.Models
             Dictionary<ulong, List<TripLoc>> newLoc = new Dictionary<ulong, List<TripLoc>>();
             using (HttpClient client = new HttpClient())
             {
-                client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("apikey", "");
+                client.DefaultRequestHeaders.Authorization =
+                    new AuthenticationHeaderValue("apikey", BusSettings.opalKey);
                 var url = positionUrl;
                 if (type != bus)
                     url = url.Replace(bus, type);

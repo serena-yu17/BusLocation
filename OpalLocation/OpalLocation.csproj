@@ -13,4 +13,10 @@
     <DotNetCliToolReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Tools" Version="2.0.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Reference Include="BusSettings">
+      <HintPath>..\..\..\..\..\Lib\References\BusSettings.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
 </Project>
