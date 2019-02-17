@@ -9,6 +9,7 @@ namespace OpalLocation.Controllers
     {
         public IActionResult Index()
         {
+            ViewBag.key = getGoogleKey();
             return View();
         }
 
@@ -62,9 +63,15 @@ namespace OpalLocation.Controllers
             return View();
         }
 
-        //public IActionResult Error()
-        //{
-        //    return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
-        //}
+        private string getGoogleKey()
+        {
+            string result;
+#if DEBUG
+            result = BusSettings.googleDebugKey;
+#else
+            result = BusSettings.googleKey;
+#endif
+            return result;
+        }
     }
 }
