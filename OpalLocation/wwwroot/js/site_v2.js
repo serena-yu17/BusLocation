@@ -146,6 +146,9 @@
                 },
                 error: function (msg) {
                     console.log(msg);
+                },
+                complete: function () {
+                    document.getElementById("loading").classList.add("hidden");
                 }
             });
         }
@@ -443,6 +446,8 @@
         document.getElementById("route").value = route;
         currentRoute = route;
         document.title = "Bus Location: " + route;
+        document.getElementById("loading").classList.remove("hidden");
+
         getRoute();
         refreshLoc();
 
