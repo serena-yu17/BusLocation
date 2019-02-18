@@ -62,8 +62,17 @@ namespace OpalLocation.Models
         public string occupancy { get; set; }
     }
 
-    public struct TripDataSet
+    public class TripDataSet
     {
+        public Dictionary<string, List<TripInfo>> trips;
+        public Dictionary<ulong, uint[]> tripStops;
+        public Dictionary<uint, Coordinate> stops;
 
+        public TripDataSet(Dictionary<string, List<TripInfo>> trips, Dictionary<ulong, uint[]> tripStops, Dictionary<uint, Coordinate> stops)
+        {
+            this.trips = trips;
+            this.tripStops = tripStops;
+            this.stops = stops;
+        }
     }
 }

@@ -228,8 +228,8 @@ namespace OpalLocation.Operations
                             if (type == VehicleType.sydneytrains)
                                 tripIDStr = stripID(tripIDStr);
                             if (ulong.TryParse(tripIDStr, out ulong tripID) &&
-                                decimal.TryParse(latitudeStr, out decimal latitude) &&
-                                decimal.TryParse(longitudeStr, out decimal longitude)
+                                float.TryParse(latitudeStr, out var latitude) &&
+                                float.TryParse(longitudeStr, out var longitude)
                                 )
                             {
                                 TripLoc trip = new TripLoc()
@@ -574,10 +574,29 @@ namespace OpalLocation.Operations
 
         async Task getTripInfo()
         {
+            var busData = await _getTripInfo(VehicleType.buses).ConfigureAwait(false);
+            var trainData = await _getTripInfo(VehicleType.sydneytrains).ConfigureAwait(false);
 
+            var newTrips = busData.trips;
+            foreach (var kp in trainData.trips)
+                newTrips[kp.Key] = kp.Value;
+            trainData.trips = null;
+            Interlocked.Exchange(ref trips, newTrips);
+
+            var newTripStop = busData.tripStops;
+            foreach (var kp in trainData.tripStops)
+                newTripStop[kp.Key] = kp.Value;
+            trainData.tripStops = null;
+            Interlocked.Exchange(ref tripStops, newTripStop)?.Clear();
+
+            var newStops = busData.stops;
+            foreach (var kp in trainData.stops)
+                newStops[kp.Key] = kp.Value;
+            trainData.stops = null;
+            Interlocked.Exchange(ref stopLocations, newStops);
         }
 
-        async Task _getTripInfo(VehicleType type)
+        async Task<TripDataSet> _getTripInfo(VehicleType type)
         {
             try
             {
@@ -590,13 +609,11 @@ namespace OpalLocation.Operations
                         url = busTripUrl;
                     else if (type == VehicleType.sydneytrains)
                         url = trainTripUrl;
-                    res = await client.GetAsync(url);
+                    res = await client.GetAsync(url).ConfigureAwait(false);
                 }
 
-                ZipArchive zip = null;
                 using (var contentStream = await res.Content.ReadAsStreamAsync())
-                    zip = new ZipArchive(contentStream);
-                using (zip)
+                using (var zip = new ZipArchive(contentStream))
                 {
                     ZipArchiveEntry routeEntry = null;
                     ZipArchiveEntry tripEntry = null;
@@ -627,15 +644,17 @@ namespace OpalLocation.Operations
                         stopTimeTsk = readStopTimes(stopTimeEntry, type);
                     if (stopEntry != null)
                         stopTsk = readStops(stopEntry, type);
-                    newTrips = await tripTsk.ConfigureAwait(false) ?? new Dictionary<string, List<TripInfo>>();
-                    newStopTimes = await stopTimeTsk.ConfigureAwait(false) ?? new Dictionary<ulong, uint[]>();
-                    newStops = await stopTsk.ConfigureAwait(false) ?? new Dictionary<uint, Coordinate>();
+                    var newTrips = await tripTsk.ConfigureAwait(false) ?? new Dictionary<string, List<TripInfo>>();
+                    var newStopTimes = await stopTimeTsk.ConfigureAwait(false) ?? new Dictionary<ulong, uint[]>();
+                    var newStops = await stopTsk.ConfigureAwait(false) ?? new Dictionary<uint, Coordinate>();
+                    return new TripDataSet(newTrips, newStopTimes, newStops);
                 }
             }
             catch (Exception ex)
             {
                 logger.LogError(ErrorHandler.getInfoStringTrace(ex));
             }
+            return new TripDataSet(new Dictionary<string, List<TripInfo>>(), new Dictionary<ulong, uint[]>(), new Dictionary<uint, Coordinate>());
         }
 
         public ulong[] strToUint(string str)

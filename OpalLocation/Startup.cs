@@ -58,7 +58,7 @@ namespace OpalLocation
                     template: "{controller=Home}/{action=Index}/{id?}");
             });
 
-            TripData.init();
+            new TripData(loggerFactory).init();
         }
     }
 }
