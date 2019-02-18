@@ -2,7 +2,7 @@
 
 namespace OpalLocation.Models
 {
-    public class TripInfo
+    public struct TripInfo
     {
         public ulong tripID { get; set; }
         public string direction { get; set; }
@@ -39,10 +39,11 @@ namespace OpalLocation.Models
         }
     }
 
-    public class TripLoc
+    public struct TripLoc
     {
         public Coordinate coordinate { get; set; }
         public string occupancy { get; set; }
+
     }
 
     public class TripDataSet
