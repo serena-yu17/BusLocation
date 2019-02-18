@@ -26,10 +26,10 @@ namespace OpalLocation.Operations
         const string busTripUrl = @"https://api.transport.nsw.gov.au/v1/gtfs/schedule/buses";
         const string trainTripUrl = @"https://api.transport.nsw.gov.au/v1/gtfs/schedule/sydneytrains";
 
-        static Dictionary<ulong, TripLoc[]> locations = new Dictionary<ulong, TripLoc[]>();
-        static Dictionary<string, TripInfo[]> trips = new Dictionary<string, TripInfo[]>();
-        static Dictionary<uint, Coordinate> stopLocations = new Dictionary<uint, Coordinate>();
-        static Dictionary<ulong, uint[]> tripStops = new Dictionary<ulong, uint[]>();
+        static IReadOnlyDictionary<ulong, TripLoc[]> locations = new Dictionary<ulong, TripLoc[]>();
+        static IReadOnlyDictionary<string, TripInfo[]> trips = new Dictionary<string, TripInfo[]>();
+        static IReadOnlyDictionary<uint, Coordinate> stopLocations = new Dictionary<uint, Coordinate>();
+        static IReadOnlyDictionary<ulong, uint[]> tripStops = new Dictionary<ulong, uint[]>();
 
         static Task tripTsk = null;
         static readonly object tripLoadLock = new object();
@@ -60,7 +60,7 @@ namespace OpalLocation.Operations
                 loadLoc();
 
             tripTimer.Elapsed += new System.Timers.ElapsedEventHandler((s, e) => loadTrip());
-            tripTimer.Interval = 1000 * 3600 * 5;  //5 hour
+            tripTimer.Interval = 1000 * 3600 * 12;  //12 hours
             tripTimer.AutoReset = true;
             tripTimer.Start();
             locTimer.Elapsed += new System.Timers.ElapsedEventHandler((s, e) => loadLoc());
@@ -170,13 +170,12 @@ namespace OpalLocation.Operations
         {
             try
             {
-                var loadingLocations = new Dictionary<ulong, List<TripLoc>>();
-                await getLocation(VehicleType.buses, loadingLocations).ConfigureAwait(false);
-                await getLocation(VehicleType.sydneytrains, loadingLocations).ConfigureAwait(false);
+                var locBus = await getLocation(VehicleType.buses).ConfigureAwait(false);
+                var locTrain = await getLocation(VehicleType.sydneytrains).ConfigureAwait(false);
 
-                Dictionary<ulong, TripLoc[]> newLoc = new Dictionary<ulong, TripLoc[]>();
-                foreach (var kp in loadingLocations)
-                    newLoc[kp.Key] = kp.Value.ToArray();
+                var newLoc = locBus;
+                foreach (var kp in locTrain)
+                    newLoc[kp.Key] = kp.Value;
 
                 Interlocked.Exchange(ref locations, newLoc);
             }
@@ -198,7 +197,7 @@ namespace OpalLocation.Operations
             return sb.ToString();
         }
 
-        async Task getLocation(VehicleType type, Dictionary<ulong, List<TripLoc>> loadingLocations)
+        async Task<Dictionary<ulong, TripLoc[]>> getLocation(VehicleType type)
         {
             Dictionary<ulong, List<TripLoc>> newLoc = new Dictionary<ulong, List<TripLoc>>();
             using (HttpClient client = new HttpClient())
@@ -248,9 +247,10 @@ namespace OpalLocation.Operations
                     }
                 }
             }
-            lock (loadingLocations)
-                foreach (var kp in newLoc)
-                    loadingLocations[kp.Key] = kp.Value;
+            Dictionary<ulong, TripLoc[]> loadingLocations = new Dictionary<ulong, TripLoc[]>();
+            foreach (var kp in newLoc)
+                loadingLocations[kp.Key] = kp.Value.ToArray();
+            return loadingLocations;
         }
 
         async Task<Dictionary<string, string>> readRoutes(ZipArchiveEntry entry)
@@ -314,7 +314,7 @@ namespace OpalLocation.Operations
             return routeID;
         }
 
-        async Task<Dictionary<string, List<TripInfo>>> readTrips(ZipArchiveEntry tripEntry, ZipArchiveEntry routeEntry, VehicleType type)
+        async Task<Dictionary<string, TripInfo[]>> readTrips(ZipArchiveEntry tripEntry, ZipArchiveEntry routeEntry, VehicleType type)
         {
             var routeID = await readRoutes(routeEntry).ConfigureAwait(false);
             char[] buffer = new char[10000];
@@ -407,7 +407,10 @@ namespace OpalLocation.Operations
                     }
                 }
             }
-            return newTrips;
+            Dictionary<string, TripInfo[]> output = new Dictionary<string, TripInfo[]>();
+            foreach (var kp in newTrips)
+                output[kp.Key] = kp.Value.ToArray();
+            return output;
         }
 
         async Task<Dictionary<ulong, uint[]>> readStopTimes(ZipArchiveEntry entry, VehicleType type)
@@ -593,7 +596,7 @@ namespace OpalLocation.Operations
             foreach (var kp in trainData.tripStops)
                 newTripStop[kp.Key] = kp.Value;
             trainData.tripStops = null;
-            Interlocked.Exchange(ref tripStops, newTripStop)?.Clear();
+            Interlocked.Exchange(ref tripStops, newTripStop);
 
             var newStops = busData.stops;
             foreach (var kp in trainData.stops)
@@ -639,7 +642,7 @@ namespace OpalLocation.Operations
                         if (routeEntry != null && tripEntry != null && stopTimeEntry != null && stopEntry != null)
                             break;
                     }
-                    var tripTsk = Task.FromResult<Dictionary<string, List<TripInfo>>>(null);
+                    var tripTsk = Task.FromResult<Dictionary<string, TripInfo[]>>(null);
                     var stopTimeTsk = Task.FromResult<Dictionary<ulong, uint[]>>(null);
                     var stopTsk = Task.FromResult<Dictionary<uint, Coordinate>>(null);
 
@@ -649,7 +652,7 @@ namespace OpalLocation.Operations
                         stopTimeTsk = readStopTimes(stopTimeEntry, type);
                     if (stopEntry != null)
                         stopTsk = readStops(stopEntry, type);
-                    var newTrips = await tripTsk.ConfigureAwait(false) ?? new Dictionary<string, List<TripInfo>>();
+                    var newTrips = await tripTsk.ConfigureAwait(false) ?? new Dictionary<string, TripInfo[]>();
                     var newStopTimes = await stopTimeTsk.ConfigureAwait(false) ?? new Dictionary<ulong, uint[]>();
                     var newStops = await stopTsk.ConfigureAwait(false) ?? new Dictionary<uint, Coordinate>();
                     return new TripDataSet(newTrips, newStopTimes, newStops);
@@ -659,7 +662,7 @@ namespace OpalLocation.Operations
             {
                 logger.LogError(ErrorHandler.getInfoStringTrace(ex));
             }
-            return new TripDataSet(new Dictionary<string, List<TripInfo>>(), new Dictionary<ulong, uint[]>(), new Dictionary<uint, Coordinate>());
+            return new TripDataSet(new Dictionary<string, TripInfo[]>(), new Dictionary<ulong, uint[]>(), new Dictionary<uint, Coordinate>());
         }
 
         public ulong[] strToUint(string str)
