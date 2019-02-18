@@ -26,8 +26,8 @@ namespace OpalLocation.Operations
         const string busTripUrl = @"https://api.transport.nsw.gov.au/v1/gtfs/schedule/buses";
         const string trainTripUrl = @"https://api.transport.nsw.gov.au/v1/gtfs/schedule/sydneytrains";
 
-        static Dictionary<ulong, List<TripLoc>> locations = new Dictionary<ulong, List<TripLoc>>();
-        static Dictionary<string, List<TripInfo>> trips = new Dictionary<string, List<TripInfo>>();
+        static Dictionary<ulong, TripLoc[]> locations = new Dictionary<ulong, TripLoc[]>();
+        static Dictionary<string, TripInfo[]> trips = new Dictionary<string, TripInfo[]>();
         static Dictionary<uint, Coordinate> stopLocations = new Dictionary<uint, Coordinate>();
         static Dictionary<ulong, uint[]> tripStops = new Dictionary<ulong, uint[]>();
 
@@ -171,11 +171,14 @@ namespace OpalLocation.Operations
             try
             {
                 var loadingLocations = new Dictionary<ulong, List<TripLoc>>();
-                await Task.WhenAll(new Task[]{
-                 getLocation(VehicleType.buses, loadingLocations),
-                 getLocation(VehicleType.sydneytrains, loadingLocations)
-            });
-                Interlocked.Exchange(ref locations, loadingLocations);
+                await getLocation(VehicleType.buses, loadingLocations).ConfigureAwait(false);
+                await getLocation(VehicleType.sydneytrains, loadingLocations).ConfigureAwait(false);
+
+                Dictionary<ulong, TripLoc[]> newLoc = new Dictionary<ulong, TripLoc[]>();
+                foreach (var kp in loadingLocations)
+                    newLoc[kp.Key] = kp.Value.ToArray();
+
+                Interlocked.Exchange(ref locations, newLoc);
             }
             catch (Exception ex)
             {
@@ -577,9 +580,12 @@ namespace OpalLocation.Operations
             var busData = await _getTripInfo(VehicleType.buses).ConfigureAwait(false);
             var trainData = await _getTripInfo(VehicleType.sydneytrains).ConfigureAwait(false);
 
-            var newTrips = busData.trips;
+            var newTrips = new Dictionary<string, TripInfo[]>();
+            foreach (var kp in busData.trips)
+                newTrips[kp.Key] = kp.Value.ToArray();
+            busData.trips = null;
             foreach (var kp in trainData.trips)
-                newTrips[kp.Key] = kp.Value;
+                newTrips[kp.Key] = kp.Value.ToArray();
             trainData.trips = null;
             Interlocked.Exchange(ref trips, newTrips);
 
@@ -592,7 +598,6 @@ namespace OpalLocation.Operations
             var newStops = busData.stops;
             foreach (var kp in trainData.stops)
                 newStops[kp.Key] = kp.Value;
-            trainData.stops = null;
             Interlocked.Exchange(ref stopLocations, newStops);
         }
 

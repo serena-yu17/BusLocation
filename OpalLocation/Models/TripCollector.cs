@@ -1,14 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.IO.Compression;
-using System.Linq;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
 
 namespace OpalLocation.Models
 {
@@ -24,7 +14,7 @@ namespace OpalLocation.Models
         }
     }
 
-    public class Coordinate
+    public struct Coordinate
     {
         public float latitude { get; set; }
         public float longitude { get; set; }
@@ -41,17 +31,10 @@ namespace OpalLocation.Models
 
         public override bool Equals(object obj)
         {
-            if (this == null && obj == null)
-                return true;
-            if (this == null && obj != null)
-                return false;
-            if (this != null && obj == null)
-                return false;
             if (ReferenceEquals(this, obj))
                 return true;
-            if (!(obj is Coordinate))
+            if (!(obj is Coordinate cor))
                 return false;
-            var cor = obj as Coordinate;
             return (this.latitude == cor.latitude && this.longitude == cor.longitude);
         }
     }
