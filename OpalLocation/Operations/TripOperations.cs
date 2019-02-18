@@ -30,6 +30,7 @@ namespace OpalLocation.Operations
         static IReadOnlyDictionary<string, TripInfo[]> trips = new Dictionary<string, TripInfo[]>();
         static IReadOnlyDictionary<uint, Coordinate> stopLocations = new Dictionary<uint, Coordinate>();
         static IReadOnlyDictionary<ulong, uint[]> tripStops = new Dictionary<ulong, uint[]>();
+        static IReadOnlyList<string> tripDirections = Array.Empty<string>();
 
         static Task tripTsk = null;
         static readonly object tripLoadLock = new object();
@@ -78,7 +79,7 @@ namespace OpalLocation.Operations
                     tripTsk.Wait();
                 if (locations.Count == 0 && locTsk != null && !locTsk.IsCompleted)
                     locTsk.Wait();
-                Dictionary<string, HashSet<ulong>> tripCollection = new Dictionary<string, HashSet<ulong>>();
+                Dictionary<int, HashSet<ulong>> tripCollection = new Dictionary<int, HashSet<ulong>>();
                 var routeTrimmed = route.Trim().ToUpper();
                 if (trips.ContainsKey(routeTrimmed))
                 {
@@ -93,7 +94,8 @@ namespace OpalLocation.Operations
                         }
                 }
                 foreach (var kp in tripCollection)
-                    res[kp.Key] = kp.Value.ToArray();
+                    if (kp.Key < tripDirections.Count)
+                        res[tripDirections[kp.Key]] = kp.Value.ToArray();
             }
             catch (Exception ex)
             {
@@ -314,12 +316,14 @@ namespace OpalLocation.Operations
             return routeID;
         }
 
-        async Task<Dictionary<string, TripInfo[]>> readTrips(ZipArchiveEntry tripEntry, ZipArchiveEntry routeEntry, VehicleType type)
+        async Task<(Dictionary<string, TripInfo[]>, List<string>)> readTrips(ZipArchiveEntry tripEntry, ZipArchiveEntry routeEntry, VehicleType type)
         {
             var routeID = await readRoutes(routeEntry).ConfigureAwait(false);
             char[] buffer = new char[10000];
 
             Dictionary<string, List<TripInfo>> newTrips = new Dictionary<string, List<TripInfo>>();
+            List<string> directionList = new List<string>();
+            Dictionary<string, int> usedDirections = new Dictionary<string, int>();
             using (var stream = tripEntry.Open())
             using (StreamReader rd = new StreamReader(stream))
             {
@@ -377,7 +381,7 @@ namespace OpalLocation.Operations
                                             {
                                                 if (!newTrips.ContainsKey(route))
                                                     newTrips[route] = new List<TripInfo>();
-                                                newTrips[route].Add(new TripInfo(tripID, desc));
+                                                newTrips[route].Add(new TripInfo(tripID, desc, directionList, usedDirections));
                                             }
                                             route = null;
                                             desc = null;
@@ -392,7 +396,7 @@ namespace OpalLocation.Operations
                                             {
                                                 if (!newTrips.ContainsKey(route))
                                                     newTrips[route] = new List<TripInfo>();
-                                                newTrips[route].Add(new TripInfo(tripID, desc));
+                                                newTrips[route].Add(new TripInfo(tripID, desc, directionList, usedDirections));
                                             }
                                             route = null;
                                             desc = null;
@@ -410,7 +414,7 @@ namespace OpalLocation.Operations
             Dictionary<string, TripInfo[]> output = new Dictionary<string, TripInfo[]>();
             foreach (var kp in newTrips)
                 output[kp.Key] = kp.Value.ToArray();
-            return output;
+            return (output, directionList);
         }
 
         async Task<Dictionary<ulong, uint[]>> readStopTimes(ZipArchiveEntry entry, VehicleType type)
@@ -583,12 +587,19 @@ namespace OpalLocation.Operations
             var busData = await _getTripInfo(VehicleType.buses).ConfigureAwait(false);
             var trainData = await _getTripInfo(VehicleType.sydneytrains).ConfigureAwait(false);
 
+            var baseDirections = busData.directionNames.Count;
+            var newDirections = busData.directionNames;
+            newDirections.AddRange(trainData.directionNames);
             var newTrips = new Dictionary<string, TripInfo[]>();
             foreach (var kp in busData.trips)
                 newTrips[kp.Key] = kp.Value.ToArray();
             busData.trips = null;
             foreach (var kp in trainData.trips)
+            {
+                for (int i = 0; i < kp.Value.Length; i++)
+                    kp.Value[i].direction += baseDirections;
                 newTrips[kp.Key] = kp.Value.ToArray();
+            }
             trainData.trips = null;
             Interlocked.Exchange(ref trips, newTrips);
 
@@ -642,7 +653,7 @@ namespace OpalLocation.Operations
                         if (routeEntry != null && tripEntry != null && stopTimeEntry != null && stopEntry != null)
                             break;
                     }
-                    var tripTsk = Task.FromResult<Dictionary<string, TripInfo[]>>(null);
+                    var tripTsk = Task.FromResult((new Dictionary<string, TripInfo[]>(), new List<string>()));
                     var stopTimeTsk = Task.FromResult<Dictionary<ulong, uint[]>>(null);
                     var stopTsk = Task.FromResult<Dictionary<uint, Coordinate>>(null);
 
@@ -652,7 +663,7 @@ namespace OpalLocation.Operations
                         stopTimeTsk = readStopTimes(stopTimeEntry, type);
                     if (stopEntry != null)
                         stopTsk = readStops(stopEntry, type);
-                    var newTrips = await tripTsk.ConfigureAwait(false) ?? new Dictionary<string, TripInfo[]>();
+                    var newTrips = await tripTsk.ConfigureAwait(false);
                     var newStopTimes = await stopTimeTsk.ConfigureAwait(false) ?? new Dictionary<ulong, uint[]>();
                     var newStops = await stopTsk.ConfigureAwait(false) ?? new Dictionary<uint, Coordinate>();
                     return new TripDataSet(newTrips, newStopTimes, newStops);
@@ -662,7 +673,8 @@ namespace OpalLocation.Operations
             {
                 logger.LogError(ErrorHandler.getInfoStringTrace(ex));
             }
-            return new TripDataSet(new Dictionary<string, TripInfo[]>(), new Dictionary<ulong, uint[]>(), new Dictionary<uint, Coordinate>());
+            return new TripDataSet((new Dictionary<string, TripInfo[]>(), new List<string>()),
+                new Dictionary<ulong, uint[]>(), new Dictionary<uint, Coordinate>());
         }
 
         public ulong[] strToUint(string str)

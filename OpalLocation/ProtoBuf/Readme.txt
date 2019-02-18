@@ -1,0 +1,1 @@
+﻿This is exported from https://github.com/jskeet/protobuf-csharp-port/blob/master/license.txt

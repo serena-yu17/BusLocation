@@ -5,12 +5,20 @@ namespace OpalLocation.Models
     public struct TripInfo
     {
         public ulong tripID { get; set; }
-        public string direction { get; set; }
+        public int direction { get; set; }
 
-        public TripInfo(ulong tripID, string direction)
+        public TripInfo(ulong tripID, string direction, List<string> directionList, Dictionary<string, int> usedDirections)
         {
             this.tripID = tripID;
-            this.direction = direction;
+            if (usedDirections.ContainsKey(direction))
+                this.direction = usedDirections[direction];
+            else
+            {
+                directionList.Add(direction);
+                var index = directionList.Count - 1;
+                usedDirections[direction] = index;
+                this.direction = index;
+            }
         }
     }
 
@@ -51,10 +59,12 @@ namespace OpalLocation.Models
         public Dictionary<string, TripInfo[]> trips;
         public Dictionary<ulong, uint[]> tripStops;
         public Dictionary<uint, Coordinate> stops;
+        public List<string> directionNames;
 
-        public TripDataSet(Dictionary<string, TripInfo[]> trips, Dictionary<ulong, uint[]> tripStops, Dictionary<uint, Coordinate> stops)
+        public TripDataSet((Dictionary<string, TripInfo[]>, List<string>) tripData, Dictionary<ulong, uint[]> tripStops, Dictionary<uint, Coordinate> stops)
         {
-            this.trips = trips;
+            this.trips = tripData.Item1;
+            this.directionNames = tripData.Item2;
             this.tripStops = tripStops;
             this.stops = stops;
         }
