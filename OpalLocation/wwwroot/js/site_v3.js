@@ -8,7 +8,7 @@
         '/': '&#x2F;',
         '`': '&#x60;',
         '=': '&#x3D;'
-    };
+    };    
 
     var options = {};
     var vehicleMarkers = [];
@@ -371,9 +371,10 @@
             if (data.hasOwnProperty(loc)) {
                 var lat = data[loc].coordinate.latitude;
                 var lon = data[loc].coordinate.longitude;
-                var occu = data[loc].occupancy;
-                if (!occu)
-                    occu = ' ';
+                var occuId = data[loc].occupancy;
+                var occu = '';
+                if (occuId !== null || occuId !== undefined || occuId < occupancyStatus.length)
+                    occu = occupancyStatus[occuId];
 
                 if (isFreshLoad === true) {
                     if (lat > maxLat)

@@ -12,6 +12,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using TransitRealtime;
 
 namespace OpalLocation.Operations
 {
@@ -22,7 +23,8 @@ namespace OpalLocation.Operations
         const string occuPattern = @"occupancy_status: ([\w-]+)";
         static readonly Regex occuRegex = new Regex(occuPattern, RegexOptions.Compiled | RegexOptions.Singleline);
 
-        const string positionUrl = @"https://api.transport.nsw.gov.au/v1/gtfs/vehiclepos/buses?debug=true";
+        const string busPositionUrl = @"https://api.transport.nsw.gov.au/v1/gtfs/vehiclepos/buses";
+        const string trainPositionUrl = @"https://api.transport.nsw.gov.au/v1/gtfs/vehiclepos/sydneytrains";
         const string busTripUrl = @"https://api.transport.nsw.gov.au/v1/gtfs/schedule/buses";
         const string trainTripUrl = @"https://api.transport.nsw.gov.au/v1/gtfs/schedule/sydneytrains";
 
@@ -48,6 +50,8 @@ namespace OpalLocation.Operations
             sydneytrains
         }
 
+        public static string[] vehicleStatus = null;
+
         public TripData(ILoggerFactory factory)
         {
             logger = factory.CreateLogger<TripData>();
@@ -55,6 +59,14 @@ namespace OpalLocation.Operations
 
         public void init()
         {
+            List<string> status = new List<string>();
+            foreach (VehiclePosition.Types.OccupancyStatus val in
+                Enum.GetValues(typeof(VehiclePosition.Types.OccupancyStatus)))
+            {
+                status.Add(val.ToString().ToLower().Replace("_", " "));
+            }
+            vehicleStatus = status.ToArray();
+
             if (trips.Count == 0)
                 loadTrip();
             if (locations.Count == 0)
@@ -79,7 +91,7 @@ namespace OpalLocation.Operations
                     tripTsk.Wait();
                 if (locations.Count == 0 && locTsk != null && !locTsk.IsCompleted)
                     locTsk.Wait();
-                Dictionary<int, HashSet<ulong>> tripCollection = new Dictionary<int, HashSet<ulong>>();
+                Dictionary<string, HashSet<ulong>> tripCollection = new Dictionary<string, HashSet<ulong>>();
                 var routeTrimmed = route.Trim().ToUpper();
                 if (trips.ContainsKey(routeTrimmed))
                 {
@@ -94,8 +106,7 @@ namespace OpalLocation.Operations
                         }
                 }
                 foreach (var kp in tripCollection)
-                    if (kp.Key < tripDirections.Count)
-                        res[tripDirections[kp.Key]] = kp.Value.ToArray();
+                    res[kp.Key] = kp.Value.ToArray();
             }
             catch (Exception ex)
             {
@@ -206,45 +217,31 @@ namespace OpalLocation.Operations
             {
                 client.DefaultRequestHeaders.Authorization =
                     new AuthenticationHeaderValue("apikey", BusSettings.opalKey);
-                var url = positionUrl;
+                var url = busPositionUrl;
                 if (type == VehicleType.sydneytrains)
-                    url = url.Replace(VehicleType.buses.ToString(), VehicleType.sydneytrains.ToString());
+                    url = trainPositionUrl;
                 var res = await client.GetAsync(url);
                 using (var contentStream = await res.Content.ReadAsStreamAsync())
-                using (StreamReader sr = new StreamReader(contentStream))
                 {
-                    var text = await sr.ReadToEndAsync();
-                    MatchCollection locMatches = locationRegex.Matches(text);
-                    MatchCollection occuMatches = null;
-                    if (type == VehicleType.buses)
-                        occuMatches = occuRegex.Matches(text);
-                    for (int i = 0; i < locMatches.Count; i++)
+                    var dataSet = FeedMessage.ParseFrom(contentStream);
+                    var entities = dataSet.EntityList;
+                    foreach (var ent in entities)
                     {
-                        Match m = locMatches[i];
-                        if (m.Success && m.Groups.Count > 3)
+                        var tripIDStr = ent.Vehicle.Trip.TripId;
+                        var latitude = ent.Vehicle.Position.Latitude;
+                        var longitude = ent.Vehicle.Position.Longitude;
+                        var occupancy = ent.Vehicle.OccupancyStatus;
+
+                        if (ulong.TryParse(tripIDStr, out ulong tripID))
                         {
-                            var tripIDStr = m.Groups[1].Value;
-                            var latitudeStr = m.Groups[2].Value;
-                            var longitudeStr = m.Groups[3].Value;
-                            string occup = null;
-                            if (type == VehicleType.buses && occuMatches[i].Success && occuMatches[i].Groups.Count > 1)
-                                occup = occuMatches[i].Groups[1].Value.Replace('_', ' ').ToLower().Replace("available", "").Trim();
-                            if (type == VehicleType.sydneytrains)
-                                tripIDStr = stripID(tripIDStr);
-                            if (ulong.TryParse(tripIDStr, out ulong tripID) &&
-                                float.TryParse(latitudeStr, out var latitude) &&
-                                float.TryParse(longitudeStr, out var longitude)
-                                )
+                            TripLoc trip = new TripLoc()
                             {
-                                TripLoc trip = new TripLoc()
-                                {
-                                    coordinate = new Coordinate(latitude, longitude),
-                                    occupancy = occup
-                                };
-                                if (!newLoc.ContainsKey(tripID))
-                                    newLoc[tripID] = new List<TripLoc>();
-                                newLoc[tripID].Add(trip);
-                            }
+                                coordinate = new Coordinate(latitude, longitude),
+                                occupancy = occupancy
+                            };
+                            if (!newLoc.ContainsKey(tripID))
+                                newLoc[tripID] = new List<TripLoc>();
+                            newLoc[tripID].Add(trip);
                         }
                     }
                 }
@@ -316,14 +313,12 @@ namespace OpalLocation.Operations
             return routeID;
         }
 
-        async Task<(Dictionary<string, TripInfo[]>, List<string>)> readTrips(ZipArchiveEntry tripEntry, ZipArchiveEntry routeEntry, VehicleType type)
+        async Task<Dictionary<string, TripInfo[]>> readTrips(ZipArchiveEntry tripEntry, ZipArchiveEntry routeEntry, VehicleType type)
         {
             var routeID = await readRoutes(routeEntry).ConfigureAwait(false);
             char[] buffer = new char[10000];
 
             Dictionary<string, List<TripInfo>> newTrips = new Dictionary<string, List<TripInfo>>();
-            List<string> directionList = new List<string>();
-            Dictionary<string, int> usedDirections = new Dictionary<string, int>();
             using (var stream = tripEntry.Open())
             using (StreamReader rd = new StreamReader(stream))
             {
@@ -381,7 +376,7 @@ namespace OpalLocation.Operations
                                             {
                                                 if (!newTrips.ContainsKey(route))
                                                     newTrips[route] = new List<TripInfo>();
-                                                newTrips[route].Add(new TripInfo(tripID, desc, directionList, usedDirections));
+                                                newTrips[route].Add(new TripInfo(tripID, desc));
                                             }
                                             route = null;
                                             desc = null;
@@ -396,7 +391,7 @@ namespace OpalLocation.Operations
                                             {
                                                 if (!newTrips.ContainsKey(route))
                                                     newTrips[route] = new List<TripInfo>();
-                                                newTrips[route].Add(new TripInfo(tripID, desc, directionList, usedDirections));
+                                                newTrips[route].Add(new TripInfo(tripID, desc));
                                             }
                                             route = null;
                                             desc = null;
@@ -414,7 +409,7 @@ namespace OpalLocation.Operations
             Dictionary<string, TripInfo[]> output = new Dictionary<string, TripInfo[]>();
             foreach (var kp in newTrips)
                 output[kp.Key] = kp.Value.ToArray();
-            return (output, directionList);
+            return output;
         }
 
         async Task<Dictionary<ulong, uint[]>> readStopTimes(ZipArchiveEntry entry, VehicleType type)
@@ -587,19 +582,12 @@ namespace OpalLocation.Operations
             var busData = await _getTripInfo(VehicleType.buses).ConfigureAwait(false);
             var trainData = await _getTripInfo(VehicleType.sydneytrains).ConfigureAwait(false);
 
-            var baseDirections = busData.directionNames.Count;
-            var newDirections = busData.directionNames;
-            newDirections.AddRange(trainData.directionNames);
             var newTrips = new Dictionary<string, TripInfo[]>();
             foreach (var kp in busData.trips)
                 newTrips[kp.Key] = kp.Value.ToArray();
             busData.trips = null;
             foreach (var kp in trainData.trips)
-            {
-                for (int i = 0; i < kp.Value.Length; i++)
-                    kp.Value[i].direction += baseDirections;
                 newTrips[kp.Key] = kp.Value.ToArray();
-            }
             trainData.trips = null;
             Interlocked.Exchange(ref trips, newTrips);
 
@@ -653,7 +641,7 @@ namespace OpalLocation.Operations
                         if (routeEntry != null && tripEntry != null && stopTimeEntry != null && stopEntry != null)
                             break;
                     }
-                    var tripTsk = Task.FromResult((new Dictionary<string, TripInfo[]>(), new List<string>()));
+                    var tripTsk = Task.FromResult(new Dictionary<string, TripInfo[]>());
                     var stopTimeTsk = Task.FromResult<Dictionary<ulong, uint[]>>(null);
                     var stopTsk = Task.FromResult<Dictionary<uint, Coordinate>>(null);
 
@@ -673,8 +661,7 @@ namespace OpalLocation.Operations
             {
                 logger.LogError(ErrorHandler.getInfoStringTrace(ex));
             }
-            return new TripDataSet((new Dictionary<string, TripInfo[]>(), new List<string>()),
-                new Dictionary<ulong, uint[]>(), new Dictionary<uint, Coordinate>());
+            return new TripDataSet();
         }
 
         public ulong[] strToUint(string str)

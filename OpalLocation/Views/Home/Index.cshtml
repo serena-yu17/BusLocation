@@ -36,8 +36,19 @@
 <script src="https://maps.googleapis.com/maps/api/js?key=@ViewBag.key&callback=initMap"
         type="text/javascript"></script>
 <script>
-    const tripUrl = '@Url.Action("Route")';
-    const locUrl = '@Url.Action("Location")';
-    const stopUrl = '@Url.Action("Stop")';
+    var tripUrl = '@Url.Action("Route")';
+    var locUrl = '@Url.Action("Location")';
+    var stopUrl = '@Url.Action("Stop")';
+    var occupancyStatus = [
+        @for(int i=0; i<  OpalLocation.Operations.TripData.vehicleStatus.Length; i++)
+        {
+            var str = "'" + OpalLocation.Operations.TripData.vehicleStatus[i] + "'";
+            if (i != OpalLocation.Operations.TripData.vehicleStatus.Length - 1)
+            {
+                str += ",";
+            }
+            @Html.Raw(str);
+        }
+    ];
 </script>
-<script src="~/js/site_v2.min.js"></script>
+<script src="~/js/site_v3.min.js"></script>

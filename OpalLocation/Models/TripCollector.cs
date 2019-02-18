@@ -1,24 +1,17 @@
 ﻿using System.Collections.Generic;
+using TransitRealtime;
 
 namespace OpalLocation.Models
 {
     public struct TripInfo
     {
         public ulong tripID { get; set; }
-        public int direction { get; set; }
+        public string direction { get; set; }
 
-        public TripInfo(ulong tripID, string direction, List<string> directionList, Dictionary<string, int> usedDirections)
+        public TripInfo(ulong tripID, string direction)
         {
             this.tripID = tripID;
-            if (usedDirections.ContainsKey(direction))
-                this.direction = usedDirections[direction];
-            else
-            {
-                directionList.Add(direction);
-                var index = directionList.Count - 1;
-                usedDirections[direction] = index;
-                this.direction = index;
-            }
+            this.direction = direction;
         }
     }
 
@@ -50,8 +43,7 @@ namespace OpalLocation.Models
     public struct TripLoc
     {
         public Coordinate coordinate { get; set; }
-        public string occupancy { get; set; }
-
+        public VehiclePosition.Types.OccupancyStatus occupancy { get; set; }
     }
 
     public class TripDataSet
@@ -59,12 +51,17 @@ namespace OpalLocation.Models
         public Dictionary<string, TripInfo[]> trips;
         public Dictionary<ulong, uint[]> tripStops;
         public Dictionary<uint, Coordinate> stops;
-        public List<string> directionNames;
 
-        public TripDataSet((Dictionary<string, TripInfo[]>, List<string>) tripData, Dictionary<ulong, uint[]> tripStops, Dictionary<uint, Coordinate> stops)
+        public TripDataSet()
         {
-            this.trips = tripData.Item1;
-            this.directionNames = tripData.Item2;
+            trips = new Dictionary<string, TripInfo[]>();
+            tripStops = new Dictionary<ulong, uint[]>();
+            stops = new Dictionary<uint, Coordinate>();
+        }
+
+        public TripDataSet(Dictionary<string, TripInfo[]> tripData, Dictionary<ulong, uint[]> tripStops, Dictionary<uint, Coordinate> stops)
+        {
+            this.trips = tripData;
             this.tripStops = tripStops;
             this.stops = stops;
         }
