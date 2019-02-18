@@ -26,9 +26,9 @@ namespace OpalLocation.Models
 
     public class Coordinate
     {
-        public decimal latitude { get; set; }
-        public decimal longitude { get; set; }
-        public Coordinate(decimal lat, decimal lon)
+        public float latitude { get; set; }
+        public float longitude { get; set; }
+        public Coordinate(float lat, float lon)
         {
             latitude = lat;
             longitude = lon;
@@ -36,7 +36,7 @@ namespace OpalLocation.Models
 
         public override int GetHashCode()
         {
-            return latitude.GetHashCode() ^ longitude.GetHashCode();
+            return (latitude.GetHashCode() << 16) | longitude.GetHashCode();
         }
 
         public override bool Equals(object obj)
@@ -60,5 +60,10 @@ namespace OpalLocation.Models
     {
         public Coordinate coordinate { get; set; }
         public string occupancy { get; set; }
-    }    
+    }
+
+    public struct TripDataSet
+    {
+
+    }
 }

@@ -135,6 +135,16 @@
         if (route !== '') {
             document.getElementById('map').classList.add("hidden");
             document.getElementById('btn-traffic').classList.add("hidden");
+
+            if (window.sessionStorage) {
+                var item = window.sessionStorage.getItem(route);
+                if (item) {
+                    var data = JSON.parse(item);
+                    renderTrip(data);
+                    document.getElementById("loading").classList.add("hidden");
+                    return;
+                }
+            }
             $.ajax({
                 type: "GET",
                 url: tripUrl,
@@ -143,6 +153,8 @@
                 },
                 success: function (data) {
                     renderTrip(data);
+                    if (window.localStorage)
+                        window.localStorage.setItem(route, JSON.stringify(data));
                 },
                 error: function (msg) {
                     console.log(msg);
@@ -178,13 +190,26 @@
             var data = {
                 tripIDs: tripStrArr.join(',')
             };
+
+            var key = JSON.stringify(data);
+
+            if (window.sessionStorage) {                
+                var item = window.sessionStorage.getItem(key);
+                if (item) {
+                    var returnedData = JSON.parse(item);
+                    renderMarkers(returnedData, isFreshLoad);
+                    return;
+                }
+            }
             $.ajax({
                 type: "GET",
                 url: locUrl,
                 data: data,
                 cache: false,
-                success: function (data) {
-                    renderMarkers(data, isFreshLoad);
+                success: function (returnedData) {
+                    if (window.sessionStorage)
+                        window.sessionStorage.setItem(key, JSON.stringify(returnedData));
+                    renderMarkers(returnedData, isFreshLoad);                    
                 },
                 error: function (msg) {
                     console.log(msg);
@@ -198,36 +223,57 @@
         for (var i = 0; i < tripIDToUpd.length; i++) {
             tripsToUpdStr.push(tripIDToUpd[i].toString());
         }
+
+        var data = {
+            tripIDs: tripsToUpdStr.join(',')
+        };
+        var key = JSON.stringify(data);
+
+        if (window.sessionStorage) {
+            var item = window.sessionStorage.getItem(key);
+            if (item) {
+                var returnedData = JSON.parse(item);
+                processStopData(returnedData, tripArr);
+                return;
+            }
+        }
+
         $.ajax({
             type: "GET",
             url: stopUrl,
             data: {
                 tripIDs: tripsToUpdStr.join(',')
             },
-            success: function (data) {
-                if (!data || data.length === 0)
-                    return;
-                for (var trip in data)
-                    if (data.hasOwnProperty(trip)) {
-                        var coord = data[trip];
-                        if (!tripStops.hasOwnProperty(trip))
-                            tripStops[trip] = [];
-                        if (!tripStopSigs.hasOwnProperty(trip))
-                            tripStopSigs[trip] = new Set();
-                        for (i = 0; i < coord.length; i++) {
-                            var coordSig = coord[i].latitude.toString() + "&" + coord[i].longitude.toString();
-                            if (!tripStopSigs[trip].has(coordSig)) {
-                                tripStops[trip].push(coord[i]);
-                                tripStopSigs[trip].add(coordSig);
-                            }
-                        }
-                    }
-                renderStops(tripArr);
+            success: function (returnedData) {
+                if (window.sessionStorage)
+                    window.sessionStorage.setItem(key, JSON.stringify(returnedData));
+                processStopData(returnedData, tripArr);
             },
             error: function (msg) {
                 console.log(msg);
             }
         });
+    }
+
+    function processStopData(returnedData, tripArr) {
+        if (!returnedData || returnedData.length === 0)
+            return;
+        for (var trip in returnedData)
+            if (returnedData.hasOwnProperty(trip)) {
+                var coord = returnedData[trip];
+                if (!tripStops.hasOwnProperty(trip))
+                    tripStops[trip] = [];
+                if (!tripStopSigs.hasOwnProperty(trip))
+                    tripStopSigs[trip] = new Set();
+                for (i = 0; i < coord.length; i++) {
+                    var coordSig = coord[i].latitude.toString() + "&" + coord[i].longitude.toString();
+                    if (!tripStopSigs[trip].has(coordSig)) {
+                        tripStops[trip].push(coord[i]);
+                        tripStopSigs[trip].add(coordSig);
+                    }
+                }
+            }
+        renderStops(tripArr);
     }
 
     function renderStops(tripIDs) {
@@ -405,7 +451,7 @@
         resizeIcons(getIconSize());
     });
 
-    $("#directionOptions").on('change', '.directionRadio',function () {
+    $("#directionOptions").on('change', '.directionRadio', function () {
         radioToggle();
     });
 
@@ -463,5 +509,5 @@
             tripStopSigs = {};
             availStops.clear();
         }, 1000 * 3600 * 24);
-    } 
+    }
 })();

@@ -23,7 +23,8 @@ namespace OpalLocation.Operations
         static readonly Regex occuRegex = new Regex(occuPattern, RegexOptions.Compiled | RegexOptions.Singleline);
 
         const string positionUrl = @"https://api.transport.nsw.gov.au/v1/gtfs/vehiclepos/buses?debug=true";
-        const string tripUrl = @"https://api.transport.nsw.gov.au/v1/gtfs/schedule/buses";
+        const string busTripUrl = @"https://api.transport.nsw.gov.au/v1/gtfs/schedule/buses";
+        const string trainTripUrl = @"https://api.transport.nsw.gov.au/v1/gtfs/schedule/sydneytrains";
 
         static Dictionary<ulong, List<TripLoc>> locations = new Dictionary<ulong, List<TripLoc>>();
         static Dictionary<string, List<TripInfo>> trips = new Dictionary<string, List<TripInfo>>();
@@ -59,7 +60,7 @@ namespace OpalLocation.Operations
                 loadLoc();
 
             tripTimer.Elapsed += new System.Timers.ElapsedEventHandler((s, e) => loadTrip());
-            tripTimer.Interval = 1000 * 3600;  //1 hour
+            tripTimer.Interval = 1000 * 3600 * 5;  //5 hour
             tripTimer.AutoReset = true;
             tripTimer.Start();
             locTimer.Elapsed += new System.Timers.ElapsedEventHandler((s, e) => loadLoc());
@@ -175,27 +176,6 @@ namespace OpalLocation.Operations
                  getLocation(VehicleType.sydneytrains, loadingLocations)
             });
                 Interlocked.Exchange(ref locations, loadingLocations);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ErrorHandler.getInfoStringTrace(ex));
-            }
-        }
-
-        async Task getTripInfo()
-        {
-            try
-            {
-                var loadingStopLocations = new Dictionary<uint, Coordinate>();
-                var loadingTrips = new Dictionary<string, List<TripInfo>>();
-                var loadingTripStops = new Dictionary<ulong, uint[]>();
-                await Task.WhenAll(
-                     getTripInfo(VehicleType.buses, loadingStopLocations, loadingTrips, loadingTripStops),
-                     getTripInfo(VehicleType.sydneytrains, loadingStopLocations, loadingTrips, loadingTripStops)
-                     );
-                Interlocked.Exchange(ref stopLocations, loadingStopLocations);
-                Interlocked.Exchange(ref trips, loadingTrips);
-                Interlocked.Exchange(ref tripStops, loadingTripStops);
             }
             catch (Exception ex)
             {
@@ -331,12 +311,13 @@ namespace OpalLocation.Operations
             return routeID;
         }
 
-        async Task readTrips(ZipArchiveEntry entry, Dictionary<string, string> routeID, VehicleType type, Dictionary<string, List<TripInfo>> loadingTrips)
+        async Task<Dictionary<string, List<TripInfo>>> readTrips(ZipArchiveEntry tripEntry, ZipArchiveEntry routeEntry, VehicleType type)
         {
+            var routeID = await readRoutes(routeEntry).ConfigureAwait(false);
             char[] buffer = new char[10000];
 
             Dictionary<string, List<TripInfo>> newTrips = new Dictionary<string, List<TripInfo>>();
-            using (var stream = entry.Open())
+            using (var stream = tripEntry.Open())
             using (StreamReader rd = new StreamReader(stream))
             {
                 string route = null, desc = null;
@@ -423,12 +404,10 @@ namespace OpalLocation.Operations
                     }
                 }
             }
-            lock (loadingTrips)
-                foreach (var kp in newTrips)
-                    loadingTrips[kp.Key] = kp.Value;
+            return newTrips;
         }
 
-        async Task readStopTimes(ZipArchiveEntry entry, VehicleType type, Dictionary<ulong, uint[]> loadingTripStops)
+        async Task<Dictionary<ulong, uint[]>> readStopTimes(ZipArchiveEntry entry, VehicleType type)
         {
             char[] buffer = new char[10000];
             Dictionary<ulong, HashSet<uint>> tempStops = new Dictionary<ulong, HashSet<uint>>();
@@ -494,12 +473,13 @@ namespace OpalLocation.Operations
                     }
                 }
             }
-            lock (loadingTripStops)
-                foreach (var kp in tempStops)
-                    loadingTripStops[kp.Key] = kp.Value.ToArray();
+            var loadingTripStops = new Dictionary<ulong, uint[]>();
+            foreach (var kp in tempStops)
+                loadingTripStops[kp.Key] = kp.Value.ToArray();
+            return loadingTripStops;
         }
 
-        async Task readStops(ZipArchiveEntry entry, VehicleType type, Dictionary<uint, Coordinate> loadingStopLocations)
+        async Task<Dictionary<uint, Coordinate>> readStops(ZipArchiveEntry entry, VehicleType type)
         {
             char[] buffer = new char[10000];
             Dictionary<uint, Coordinate> newStopLocations = new Dictionary<uint, Coordinate>();
@@ -511,7 +491,7 @@ namespace OpalLocation.Operations
                 uint cycle = 1;
                 List<char> content = new List<char>();
                 ulong i = 0;
-                decimal lat = 0, lon = 0;
+                float lat = 0, lon = 0;
                 uint stopID = 0;
                 while (true)
                 {
@@ -547,14 +527,14 @@ namespace OpalLocation.Operations
                                         if (type == VehicleType.buses)
                                         {
                                             var latStr = new string(content.ToArray());
-                                            decimal.TryParse(latStr, out lat);
+                                            float.TryParse(latStr, out lat);
                                         }
                                         break;
                                     case 3:
                                         if (type == VehicleType.buses)
                                         {
                                             var lonStr = new string(content.ToArray());
-                                            decimal.TryParse(lonStr, out lon);
+                                            float.TryParse(lonStr, out lon);
                                             if (stopID != 0 && lat != 0 && lon != 0)
                                                 newStopLocations[stopID] = new Coordinate(lat, lon);
                                             lat = 0;
@@ -566,14 +546,14 @@ namespace OpalLocation.Operations
                                         if (type == VehicleType.sydneytrains)
                                         {
                                             var latStr = new string(content.ToArray());
-                                            decimal.TryParse(latStr, out lat);
+                                            float.TryParse(latStr, out lat);
                                         }
                                         break;
                                     case 5:
                                         if (type == VehicleType.sydneytrains)
                                         {
                                             var lonStr = new string(content.ToArray());
-                                            decimal.TryParse(lonStr, out lon);
+                                            float.TryParse(lonStr, out lon);
                                             if (stopID != 0 && lat != 0 && lon != 0)
                                                 newStopLocations[stopID] = new Coordinate(lat, lon);
                                             lat = 0;
@@ -589,355 +569,72 @@ namespace OpalLocation.Operations
                     }
                 }
             }
-            lock (loadingStopLocations)
-                foreach (var kp in newStopLocations)
-                    loadingStopLocations[kp.Key] = kp.Value;
+            return newStopLocations;
         }
 
-        async Task getTripInfo(VehicleType type,
-            Dictionary<uint, Coordinate> loadingStopLocations,
-            Dictionary<string, List<TripInfo>> loadingTrips,
-            Dictionary<ulong, uint[]> loadingTripStops
-            )
+        async Task getTripInfo()
         {
-            HttpResponseMessage res;
-            using (HttpClient client = new HttpClient())
+
+        }
+
+        async Task _getTripInfo(VehicleType type)
+        {
+            try
             {
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("apikey", BusSettings.busStopKey);
-                var url = tripUrl;
-                if (type == VehicleType.sydneytrains)
-                    url = url.Replace(VehicleType.buses.ToString(), VehicleType.sydneytrains.ToString());
-                res = await client.GetAsync(url);
+                HttpResponseMessage res;
+                using (HttpClient client = new HttpClient())
+                {
+                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("apikey", BusSettings.busStopKey);
+                    string url = null;
+                    if (type == VehicleType.buses)
+                        url = busTripUrl;
+                    else if (type == VehicleType.sydneytrains)
+                        url = trainTripUrl;
+                    res = await client.GetAsync(url);
+                }
+
+                ZipArchive zip = null;
+                using (var contentStream = await res.Content.ReadAsStreamAsync())
+                    zip = new ZipArchive(contentStream);
+                using (zip)
+                {
+                    ZipArchiveEntry routeEntry = null;
+                    ZipArchiveEntry tripEntry = null;
+                    ZipArchiveEntry stopTimeEntry = null;
+                    ZipArchiveEntry stopEntry = null;
+
+                    foreach (var entry in zip.Entries)
+                    {
+                        if (entry.Name.StartsWith("routes"))
+                            routeEntry = entry;
+                        else if (entry.Name.StartsWith("trips"))
+                            tripEntry = entry;
+                        else if (entry.Name.StartsWith("stop_times"))
+                            stopTimeEntry = entry;
+                        else if (entry.Name.StartsWith("stops"))
+                            stopEntry = entry;
+
+                        if (routeEntry != null && tripEntry != null && stopTimeEntry != null && stopEntry != null)
+                            break;
+                    }
+                    var tripTsk = Task.FromResult<Dictionary<string, List<TripInfo>>>(null);
+                    var stopTimeTsk = Task.FromResult<Dictionary<ulong, uint[]>>(null);
+                    var stopTsk = Task.FromResult<Dictionary<uint, Coordinate>>(null);
+
+                    if (tripEntry != null && routeEntry != null)
+                        tripTsk = readTrips(tripEntry, routeEntry, type);
+                    if (stopTimeEntry != null)
+                        stopTimeTsk = readStopTimes(stopTimeEntry, type);
+                    if (stopEntry != null)
+                        stopTsk = readStops(stopEntry, type);
+                    newTrips = await tripTsk.ConfigureAwait(false) ?? new Dictionary<string, List<TripInfo>>();
+                    newStopTimes = await stopTimeTsk.ConfigureAwait(false) ?? new Dictionary<ulong, uint[]>();
+                    newStops = await stopTsk.ConfigureAwait(false) ?? new Dictionary<uint, Coordinate>();
+                }
             }
-
-            char[] buffer = new char[10000];
-            Dictionary<string, string> routeID = new Dictionary<string, string>();
-
-            ZipArchive zip = null;
-            using (var contentStream = await res.Content.ReadAsStreamAsync())
-                zip = new ZipArchive(contentStream);
-            using (zip)
+            catch (Exception ex)
             {
-                foreach (var entry in zip.Entries)
-                {
-                    if (entry.Name.StartsWith("routes"))
-                    {
-                        using (var stream = entry.Open())
-                        using (StreamReader rd = new StreamReader(stream))
-                        {
-                            uint quoteCount = 0;
-                            uint contentCount = 0;
-                            uint cycle = 1;
-                            List<char> content = new List<char>();
-                            ulong i = 0;
-                            string routeIDStr = null, shortName = null;
-                            while (true)
-                            {
-                                int chars = await rd.ReadAsync(buffer, 0, buffer.Length);
-                                if (chars == 0)
-                                    break;
-                                var start = i;      //skip titles
-                                if (i == 0)
-                                {
-                                    for (; i < (ulong)chars && buffer[i] != '\n'; i++)
-                                        if (buffer[i] == ',')
-                                            cycle++;
-                                }
-                                for (; i < (ulong)chars + start; i++)
-                                {
-                                    if (buffer[i - start] == '"')
-                                    {
-                                        quoteCount++;
-                                        if (quoteCount % 2 == 1)
-                                        {
-                                            contentCount++;
-                                            content.Clear();
-                                        }
-                                        else
-                                        {
-                                            switch ((contentCount - 1) % cycle)
-                                            {
-                                                case 0:
-                                                    routeIDStr = new string(content.ToArray()).Trim().ToUpper();
-                                                    break;
-                                                case 2:
-                                                    shortName = new string(content.ToArray()).Trim().ToUpper();
-                                                    if (routeIDStr != null && shortName != null)
-                                                        routeID[routeIDStr] = shortName;
-                                                    routeIDStr = null;
-                                                    shortName = null;
-                                                    break;
-                                            }
-                                        }
-                                    }
-                                    else if (quoteCount % 2 == 1)
-                                        content.Add(buffer[i - start]);
-                                }
-                            }
-                        }
-                        break;
-                    }
-                }
-                foreach (var entry in zip.Entries)
-                {
-                    if (entry.Name.StartsWith("trips"))
-                    {
-                        Dictionary<string, List<TripInfo>> newTrips = new Dictionary<string, List<TripInfo>>();
-                        using (var stream = entry.Open())
-                        using (StreamReader rd = new StreamReader(stream))
-                        {
-                            string route = null, desc = null;
-                            ulong tripID = 0;
-                            ulong i = 0;
-                            uint cycle = 1;
-                            uint quoteCount = 0;
-                            uint contentCount = 0;
-                            List<char> content = new List<char>();
-                            while (true)
-                            {
-                                int chars = await rd.ReadAsync(buffer, 0, buffer.Length);
-                                if (chars == 0)
-                                    break;
-                                var start = i;      //skip titles
-                                if (i == 0)
-                                {
-                                    for (; i < (ulong)chars && buffer[i] != '\n'; i++)
-                                        if (buffer[i] == ',')
-                                            cycle++;
-                                }
-                                for (; i < (ulong)chars + start; i++)
-                                {
-                                    if (buffer[i - start] == '"')
-                                    {
-                                        quoteCount++;
-                                        if (quoteCount % 2 == 1)
-                                        {
-                                            contentCount++;
-                                            content.Clear();
-                                        }
-                                        else
-                                        {
-                                            switch ((contentCount - 1) % cycle)
-                                            {
-                                                case 0:
-                                                    var routeIDStr = new string(content.ToArray()).Trim().ToUpper();
-                                                    if (routeID.ContainsKey(routeIDStr))
-                                                        route = routeID[routeIDStr];
-                                                    break;
-                                                case 2:
-                                                    var tripStr = new string(content.ToArray());
-                                                    if (type == VehicleType.sydneytrains)
-                                                        tripStr = stripID(tripStr);
-                                                    ulong.TryParse(tripStr, out tripID);
-                                                    break;
-                                                case 3:
-                                                    if (type == VehicleType.sydneytrains)
-                                                    {
-                                                        desc = new string(content.ToArray()).Trim();
-                                                        if (!string.IsNullOrEmpty(route) &&
-                                                            !string.IsNullOrEmpty(desc) && tripID != 0 &&
-                                                            desc != "Empty Train")
-                                                        {
-                                                            if (!newTrips.ContainsKey(route))
-                                                                newTrips[route] = new List<TripInfo>();
-                                                            newTrips[route].Add(new TripInfo(tripID, desc));
-                                                        }
-                                                        route = null;
-                                                        desc = null;
-                                                        tripID = 0;
-                                                    }
-                                                    break;
-                                                case 9:
-                                                    if (type == VehicleType.buses)
-                                                    {
-                                                        desc = new string(content.ToArray());
-                                                        if (!string.IsNullOrEmpty(route) && !string.IsNullOrEmpty(desc) && tripID != 0)
-                                                        {
-                                                            if (!newTrips.ContainsKey(route))
-                                                                newTrips[route] = new List<TripInfo>();
-                                                            newTrips[route].Add(new TripInfo(tripID, desc));
-                                                        }
-                                                        route = null;
-                                                        desc = null;
-                                                        tripID = 0;
-                                                    }
-                                                    break;
-                                            }
-                                        }
-                                    }
-                                    else if (quoteCount % 2 == 1)
-                                        content.Add(buffer[i - start]);
-                                }
-                            }
-                        }
-                        lock (loadingTrips)
-                            foreach (var kp in newTrips)
-                                loadingTrips[kp.Key] = kp.Value;
-                        routeID.Clear();
-                    }
-                    else if (entry.Name.StartsWith("stop_times"))
-                    {
-                        Dictionary<ulong, HashSet<uint>> tempStops = new Dictionary<ulong, HashSet<uint>>();
-                        using (var stream = entry.Open())
-                        using (StreamReader rd = new StreamReader(stream))
-                        {
-                            uint quoteCount = 0;
-                            uint contentCount = 0;
-                            uint cycle = 1;
-                            List<char> content = new List<char>();
-                            ulong i = 0;
-                            ulong tripID = 0;
-                            uint stopID = 0;
-                            while (true)
-                            {
-                                int chars = await rd.ReadAsync(buffer, 0, buffer.Length);
-                                if (chars == 0)
-                                    break;
-                                var start = i;      //skip titles
-                                if (i == 0)
-                                {
-                                    for (; i < (ulong)chars && buffer[i] != '\n'; i++)
-                                        if (buffer[i] == ',')
-                                            cycle++;
-                                }
-                                for (; i < (ulong)chars + start; i++)
-                                {
-                                    if (buffer[i - start] == '"')
-                                    {
-                                        quoteCount++;
-                                        if (quoteCount % 2 == 1)
-                                        {
-                                            contentCount++;
-                                            content.Clear();
-                                        }
-                                        else
-                                        {
-                                            switch ((contentCount - 1) % cycle)
-                                            {
-                                                case 0:
-                                                    var tripStr = new string(content.ToArray());
-                                                    if (type == VehicleType.sydneytrains)
-                                                        tripStr = stripID(tripStr);
-                                                    ulong.TryParse(tripStr, out tripID);
-                                                    break;
-                                                case 3:
-                                                    var stopStr = new string(content.ToArray());
-                                                    uint.TryParse(stopStr, out stopID);
-                                                    if (stopID != 0 && tripID != 0)
-                                                    {
-                                                        if (!tempStops.ContainsKey(tripID))
-                                                            tempStops[tripID] = new HashSet<uint>();
-                                                        tempStops[tripID].Add(stopID);
-                                                    }
-                                                    tripID = 0;
-                                                    stopID = 0;
-                                                    break;
-                                            }
-                                        }
-                                    }
-                                    else if (quoteCount % 2 == 1)
-                                        content.Add(buffer[i - start]);
-                                }
-                            }
-                        }
-                        lock (loadingTripStops)
-                            foreach (var kp in tempStops)
-                                loadingTripStops[kp.Key] = kp.Value.ToArray();
-                    }
-                    else if (entry.Name.StartsWith("stops"))
-                    {
-                        Dictionary<uint, Coordinate> newStopLocations = new Dictionary<uint, Coordinate>();
-                        using (var stream = entry.Open())
-                        using (StreamReader rd = new StreamReader(stream))
-                        {
-                            uint quoteCount = 0;
-                            uint contentCount = 0;
-                            uint cycle = 1;
-                            List<char> content = new List<char>();
-                            ulong i = 0;
-                            decimal lat = 0, lon = 0;
-                            uint stopID = 0;
-                            while (true)
-                            {
-                                int chars = await rd.ReadAsync(buffer, 0, buffer.Length);
-                                if (chars == 0)
-                                    break;
-                                var start = i;      //skip titles
-                                if (i == 0)
-                                {
-                                    for (; i < (ulong)chars && buffer[i] != '\n'; i++)
-                                        if (buffer[i] == ',')
-                                            cycle++;
-                                }
-                                for (; i < (ulong)chars + start; i++)
-                                {
-                                    if (buffer[i - start] == '"')
-                                    {
-                                        quoteCount++;
-                                        if (quoteCount % 2 == 1)
-                                        {
-                                            contentCount++;
-                                            content.Clear();
-                                        }
-                                        else
-                                        {
-                                            switch ((contentCount - 1) % cycle)
-                                            {
-                                                case 0:
-                                                    var stopStr = new string(content.ToArray());
-                                                    uint.TryParse(stopStr, out stopID);
-                                                    break;
-                                                case 2:
-                                                    if (type == VehicleType.buses)
-                                                    {
-                                                        var latStr = new string(content.ToArray());
-                                                        decimal.TryParse(latStr, out lat);
-                                                    }
-                                                    break;
-                                                case 3:
-                                                    if (type == VehicleType.buses)
-                                                    {
-                                                        var lonStr = new string(content.ToArray());
-                                                        decimal.TryParse(lonStr, out lon);
-                                                        if (stopID != 0 && lat != 0 && lon != 0)
-                                                            newStopLocations[stopID] = new Coordinate(lat, lon);
-                                                        lat = 0;
-                                                        lon = 0;
-                                                        stopID = 0;
-                                                    }
-                                                    break;
-                                                case 4:
-                                                    if (type == VehicleType.sydneytrains)
-                                                    {
-                                                        var latStr = new string(content.ToArray());
-                                                        decimal.TryParse(latStr, out lat);
-                                                    }
-                                                    break;
-                                                case 5:
-                                                    if (type == VehicleType.sydneytrains)
-                                                    {
-                                                        var lonStr = new string(content.ToArray());
-                                                        decimal.TryParse(lonStr, out lon);
-                                                        if (stopID != 0 && lat != 0 && lon != 0)
-                                                            newStopLocations[stopID] = new Coordinate(lat, lon);
-                                                        lat = 0;
-                                                        lon = 0;
-                                                        stopID = 0;
-                                                    }
-                                                    break;
-                                            }
-                                        }
-                                    }
-                                    else if (quoteCount % 2 == 1)
-                                        content.Add(buffer[i - start]);
-                                }
-                            }
-                        }
-                        lock (loadingStopLocations)
-                            foreach (var kp in newStopLocations)
-                                loadingStopLocations[kp.Key] = kp.Value;
-                    }
-                }
+                logger.LogError(ErrorHandler.getInfoStringTrace(ex));
             }
         }
 
