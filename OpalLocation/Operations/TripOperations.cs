@@ -176,10 +176,10 @@ namespace OpalLocation.Operations
             if (locTsk == null || locTsk.IsCompleted)
                 lock (locLoadLock)
                     if (locTsk == null || locTsk.IsCompleted)
-                        locTsk = getLocation();
+                        locTsk = loadLocation();
         }
 
-        async Task getLocation()
+        async Task loadLocation()
         {
             try
             {
@@ -228,6 +228,8 @@ namespace OpalLocation.Operations
                     foreach (var ent in entities)
                     {
                         var tripIDStr = ent.Vehicle.Trip.TripId;
+                        if (type == VehicleType.sydneytrains)
+                            tripIDStr = stripID(tripIDStr);
                         var latitude = ent.Vehicle.Position.Latitude;
                         var longitude = ent.Vehicle.Position.Longitude;
                         var occupancy = ent.Vehicle.OccupancyStatus;
