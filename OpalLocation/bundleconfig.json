@@ -26,5 +26,11 @@
     "inputFiles": [
       "wwwroot/js/site_v2.js"
     ]
+  },
+  {
+    "outputFileName": "wwwroot/js/site_v4.min.js",
+    "inputFiles": [
+      "wwwroot/js/site_v4.js"
+    ]
   }
 ]

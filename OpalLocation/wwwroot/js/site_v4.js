@@ -8,7 +8,7 @@
         '/': '&#x2F;',
         '`': '&#x60;',
         '=': '&#x3D;'
-    };    
+    };
 
     var options = {};
     var vehicleMarkers = [];
@@ -193,7 +193,7 @@
 
             var key = JSON.stringify(data);
 
-            if (window.sessionStorage) {                
+            if (window.sessionStorage) {
                 var item = window.sessionStorage.getItem(key);
                 if (item) {
                     var returnedData = JSON.parse(item);
@@ -209,7 +209,7 @@
                 success: function (returnedData) {
                     if (window.sessionStorage)
                         window.sessionStorage.setItem(key, JSON.stringify(returnedData));
-                    renderMarkers(returnedData, isFreshLoad);                    
+                    renderMarkers(returnedData, isFreshLoad);
                 },
                 error: function (msg) {
                     console.log(msg);
@@ -319,26 +319,38 @@
         document.getElementById('directionForm').classList.remove('hidden');
         document.getElementById('prompt').classList.add("hidden");
         var count = 0;
+        var firstRadio = null;
         for (trip in data)
             if (data.hasOwnProperty(trip)) {
                 var lbl = document.createElement('label');
+                document.getElementById('directionOptions').appendChild(lbl);
                 lbl.classList.add("form-control");
                 var radID = "directionRadio" + count.toString();
-                var html = '<input type="radio" class="directionRadio" name="direction" id="' + radID + '"/> ' + escapeHtml(trip);
-                if (count === 0)
-                    html = '<input type="radio" class="directionRadio" name="direction" id="' + radID + '" checked/> ' + escapeHtml(trip);
-                lbl.innerHTML = html;
+                var radio = document.createElement("input");
+                radio.type = "radio";
+                radio.classList.add("directionRadio");
+                radio.name = "direction";
+                radio.id = radID;
+                if (count === 0) {
+                    radio.checked = true;
+                    firstRadio = radio;
+                }
+                else
+                    radio.checked = false;
+                lbl.appendChild(radio);
                 var id = "directionOption" + count.toString();
                 lbl.id = id;
-                document.getElementById('directionOptions').appendChild(lbl);
                 options[id] = {
                     radID: radID,
                     trips: data[trip]
                 };
+                var span = document.createElement("span");
+                span.innerText = ' ' + trip;
+                lbl.appendChild(span);
                 count++;
             }
-        if (document.getElementById('directionRadio0'))
-            document.getElementById('directionRadio0').focus();
+        if (firstRadio)
+            firstRadio.focus();
         radioToggle();
     }
 
